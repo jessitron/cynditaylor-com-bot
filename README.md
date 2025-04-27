@@ -5,19 +5,38 @@ This project implements an automated agent that helps Cyndi Taylor update her we
 ## Workflow
 
 ```mermaid
-graph TD
-    A[Cyndi Taylor] -->|Sends email/text with instructions and attachments| B[Website Bot Agent]
-    B -->|Checks out code from GitHub| C[Website Repository]
-    B -->|Makes requested changes| C
-    B -->|Commits and pushes changes| D[GitHub]
-    D -->|GitHub Actions| E[Build and Deploy]
-    E -->|Publishes to| F[GitHub Pages]
-    F -->|Website updated| G[cynditaylor.com]
-    B -->|Monitors deployment| D
-    B -->|Sends confirmation| A
-    A -->|Provides feedback| B
-    B -->|Records feedback| H[Feedback Log]
-    A -->|Requests further changes| B
+sequenceDiagram
+    participant Cyndi as Cyndi Taylor
+    participant Agent as Website Bot Agent
+    participant GitHub as GitHub Repository
+    participant Actions as GitHub Actions
+    participant Website as cynditaylor.com
+
+    Cyndi->>Agent: Sends email/text with change request
+    Note over Cyndi,Agent: Request may include text instructions and image attachments
+
+    Agent->>GitHub: Pulls latest website code
+    Agent->>Agent: Makes requested changes to code
+    Agent->>GitHub: Commits and pushes changes
+
+    GitHub->>Actions: Triggers build workflow
+    Actions->>Website: Builds and deploys website
+
+    Agent->>Actions: Monitors deployment status
+    Actions->>Agent: Deployment complete
+
+    Agent->>Cyndi: Sends confirmation with website link
+    Cyndi->>Website: Views the changes
+
+    alt Happy with changes
+        Cyndi->>Agent: Sends approval feedback
+        Agent->>Agent: Records positive feedback
+        Note over Cyndi: Happy with the result! 😊
+    else Needs adjustments
+        Cyndi->>Agent: Requests further changes
+        Agent->>Agent: Records feedback
+        Note over Agent: Process repeats until Cyndi is satisfied
+    end
 ```
 
 ## Purpose
@@ -31,6 +50,7 @@ This agent serves as an intermediary between Cyndi Taylor and her website's code
 5. Provide feedback on the changes
 
 The agent handles all the technical aspects of:
+
 - Code modification
 - Version control
 - Deployment
