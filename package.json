@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "python -m pytest tests/"
+    "test": "opentelemetry-instrument python -m pytest tests/"
   },
   "repository": {
     "type": "git",
