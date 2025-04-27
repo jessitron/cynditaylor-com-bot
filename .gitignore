@@ -18,6 +18,7 @@ build/
 # Logs
 logs/
 *.log
+chat_logs/
 
 # OS specific files
 .DS_Store
@@ -33,3 +34,26 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env
+.venv
+pip-debug.log
+pip-log.txt
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.egg-info/
+.installed.cfg
+*.egg
