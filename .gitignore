@@ -4,6 +4,31 @@ npm-debug.log
 yarn-debug.log
 yarn-error.log
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+venv/
+.venv/
+
 # Environment variables
 .env
 .env.local
@@ -18,6 +43,7 @@ build/
 # Logs
 logs/
 *.log
+chat_logs/
 
 # OS specific files
 .DS_Store
