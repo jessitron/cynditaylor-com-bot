@@ -61,6 +61,70 @@ The agent handles all the technical aspects of:
 
 This project implements the agent that processes requests, makes the appropriate code changes, and manages the deployment process.
 
+### Project Structure
+
+- `main.py`: Entry point that initializes the agent and passes instructions
+- `llm/`: Directory for LLM-related code
+  - `provider.py`: Abstract base class for LLM providers
+  - `frank_provider.py`: Implementation for the "Frank" LLM
+- `agent/`: Directory for agent-related code
+  - `agent.py`: Main agent implementation
+  - `tools/`: Directory for tools the agent can use
+    - `file_tools.py`: Tools for reading/writing files
+    - `git_tools.py`: Tools for git operations
+- `config.py`: Configuration settings
+- `tests/`: Unit tests
+- `requirements.txt`: Project dependencies
+
+### LLM Abstraction
+
+The project uses an abstraction around the LLM API, making it easy to switch between different LLM providers. Currently, it includes a placeholder implementation for the "Frank" LLM, which can be replaced with a real LLM API integration.
+
+To add a new LLM provider:
+
+1. Create a new class that implements the `LLMProvider` interface
+2. Update the `get_llm_provider()` function in `main.py` to use the new provider
+3. Update the configuration in `config.py` as needed
+
 ## Setup
 
-[Setup instructions will be added as the project develops]
+1. Clone the repository:
+   ```
+   git clone https://github.com/username/cynditaylor-com-bot.git
+   cd cynditaylor-com-bot
+   ```
+
+2. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+3. Set up environment variables:
+   ```
+   export FRANK_API_KEY=your_api_key
+   export WEBSITE_DIR=path_to_website_directory
+   ```
+
+   Or create a `.env` file with these variables.
+
+## Usage
+
+Run the agent with a default instruction:
+
+```
+python main.py
+```
+
+Or provide a custom instruction:
+
+```
+python main.py "Update the contact information to include a new email address"
+```
+
+## Testing
+
+Run the tests:
+
+```
+python -m unittest discover tests
+```
