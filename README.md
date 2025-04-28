@@ -99,9 +99,8 @@ To add a new LLM provider:
    pip install -r requirements.txt
    ```
 
-3. Set up environment variables:
+3. Set up environment variables (optional):
    ```
-   export FRANK_API_KEY=your_api_key
    export WEBSITE_DIR=path_to_website_directory
    ```
 
