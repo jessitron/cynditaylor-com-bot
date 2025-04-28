@@ -1,3 +1,7 @@
+import os
+import json
+from pathlib import Path
+import subprocess
 from .anthropic_adapter import AnthropicAdapter
 
 def execute_tool(tool_name, tool_input):
@@ -11,10 +15,97 @@ def execute_tool(tool_name, tool_input):
     Returns:
         str: The result of the tool execution
     """
-    if tool_name == "read_file":
-        return f"Content of {tool_input['path']}"
+    try:
+        if tool_name == "read_file":
+            path = tool_input.get('path')
+            if not path:
+                return "Error: No path provided"
 
-    return f"Executed {tool_name} with {tool_input}"
+            try:
+                with open(path, 'r') as file:
+                    content = file.read()
+                return content
+            except Exception as e:
+                return f"Error reading file {path}: {str(e)}"
+
+        elif tool_name == "write_file":
+            path = tool_input.get('path')
+            content = tool_input.get('content')
+
+            if not path or content is None:
+                return "Error: Path and content are required"
+
+            try:
+                # Ensure directory exists
+                directory = os.path.dirname(path)
+                if directory and not os.path.exists(directory):
+                    os.makedirs(directory)
+
+                with open(path, 'w') as file:
+                    file.write(content)
+                return f"Successfully wrote to {path}"
+            except Exception as e:
+                return f"Error writing to file {path}: {str(e)}"
+
+        elif tool_name == "list_files":
+            directory = tool_input.get('directory', '.')
+
+            try:
+                files = []
+                for item in Path(directory).glob('**/*'):
+                    if item.is_file():
+                        files.append(str(item))
+                return json.dumps(files)
+            except Exception as e:
+                return f"Error listing files in {directory}: {str(e)}"
+
+        elif tool_name == "git_pull":
+            try:
+                result = subprocess.run(
+                    ["git", "pull"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                return result.stdout
+            except subprocess.CalledProcessError as e:
+                return f"Error executing git pull: {e.stderr}"
+
+        elif tool_name == "git_push":
+            try:
+                # First commit any changes
+                message = tool_input.get('message', 'Update website - auggie')
+
+                # Add all changes
+                add_result = subprocess.run(
+                    ["git", "add", "."],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+
+                # Commit changes
+                commit_result = subprocess.run(
+                    ["git", "commit", "-m", message],
+                    capture_output=True,
+                    text=True
+                )
+
+                # Push changes
+                push_result = subprocess.run(
+                    ["git", "push"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+
+                return f"Add: {add_result.stdout}\nCommit: {commit_result.stdout}\nPush: {push_result.stdout}"
+            except subprocess.CalledProcessError as e:
+                return f"Error executing git operations: {e.stderr}"
+
+        return f"Unknown tool: {tool_name}"
+    except Exception as e:
+        return f"Error executing tool {tool_name}: {str(e)}"
 
 class Agent:
     """
@@ -48,6 +139,46 @@ class Agent:
                         "path": {"type": "string", "description": "Path to the file"}
                     },
                     "required": ["path"]
+                }
+            },
+            {
+                "name": "write_file",
+                "description": "Write content to a file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Path to the file"},
+                        "content": {"type": "string", "description": "Content to write to the file"}
+                    },
+                    "required": ["path", "content"]
+                }
+            },
+            {
+                "name": "list_files",
+                "description": "List all files in a directory recursively",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "directory": {"type": "string", "description": "Directory to list files from. Defaults to current directory."}
+                    }
+                }
+            },
+            {
+                "name": "git_pull",
+                "description": "Pull the latest changes from the remote repository",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {}
+                }
+            },
+            {
+                "name": "git_push",
+                "description": "Commit and push changes to the remote repository",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "message": {"type": "string", "description": "Commit message. Defaults to 'Update website - auggie'."}
+                    }
                 }
             }
         ]
