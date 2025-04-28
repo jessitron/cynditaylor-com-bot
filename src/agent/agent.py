@@ -23,8 +23,6 @@ class Agent:
 
     def __init__(self, anthropic_adapter=None):
         """
-        Initialize the agent.
-
         Args:
             anthropic_adapter (AnthropicAdapter): Adapter for the Anthropic API
         """
