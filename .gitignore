@@ -1,1 +1,4 @@
-cynditaylor-com
+cynditaylor-com/
+.be
+__pycache__/
+chat_logs/
