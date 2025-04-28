@@ -21,7 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def setup_environment():
+def setup_environment(): # TODO(agent) this should only happen on instantiation of an Anthropic Adapter
     """
     Set up the environment by loading environment variables.
     """
