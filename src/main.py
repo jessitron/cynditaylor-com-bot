@@ -23,14 +23,13 @@ def get_llm_provider() -> FrankProvider:
     Get the LLM provider based on configuration.
 
     Returns:
-        An instance of FrankProviderWithTools
+        An instance of FrankProvider
     """
     llm_config = Config.get_llm_config()
 
     if llm_config["provider"] == "frank":
         return FrankProvider(
-            model=llm_config["model"],
-            max_iterations=10
+            model=llm_config["model"]
         )
     else:
         raise ValueError(f"Unsupported LLM provider: {llm_config['provider']}")

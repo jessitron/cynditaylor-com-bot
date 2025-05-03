@@ -1,14 +1,32 @@
 import os
-from typing import Dict, Any, Optional
+import json
+import re
+from typing import Dict, Any, Optional, List
 
-from src.llm.frank_provider import FrankProvider, ToolDefinition
-from src.agent.tools.tool import Tool
+from src.llm.frank_provider import FrankProvider
 from src.agent.tools.file_tools import ListFilesTool, ReadFileTool, WriteFileTool
 from src.agent.tools.git_tools import CommitChangesTool, PushChangesTool
 
 from opentelemetry import trace
 
 tracer = trace.get_tracer("cynditaylor-com-bot")
+
+# Define a simple class to represent tool definitions
+class ToolDefinition:
+    """Definition of a tool that the LLM can use."""
+
+    def __init__(self, name: str, description: str, function=None):
+        """
+        Initialize a tool definition.
+
+        Args:
+            name: Name of the tool
+            description: Description of what the tool does
+            function: Function to call when the tool is used (not used in the new design)
+        """
+        self.name = name
+        self.description = description
+        self.function = function
 
 class WebsiteAgent:
     """
@@ -60,38 +78,35 @@ class WebsiteAgent:
             self.tools[tool.name] = tool
 
     def _register_tools(self):
-        """Register tools with the LLM provider."""
-        # File tools
-        self.llm.register_tool(ToolDefinition(
-            name="list_files",
-            description="List files in a directory",
-            function=lambda **kwargs: self._execute_tool("list_files", kwargs)
-        ))
+        """
+        Create tool definitions.
 
-        self.llm.register_tool(ToolDefinition(
-            name="read_file",
-            description="Read the contents of a file",
-            function=lambda **kwargs: self._execute_tool("read_file", kwargs)
-        ))
-
-        self.llm.register_tool(ToolDefinition(
-            name="write_file",
-            description="Write content to a file",
-            function=lambda **kwargs: self._execute_tool("write_file", kwargs)
-        ))
-
-        # Git tools
-        self.llm.register_tool(ToolDefinition(
-            name="commit_changes",
-            description="Commit changes to the repository",
-            function=lambda **kwargs: self._execute_tool("commit_changes", kwargs)
-        ))
-
-        self.llm.register_tool(ToolDefinition(
-            name="push_changes",
-            description="Push changes to the remote repository",
-            function=lambda **kwargs: self._execute_tool("push_changes", kwargs)
-        ))
+        Note: In the new design, we don't register tools with the LLM provider.
+        The agent is responsible for executing tools based on the LLM's response.
+        """
+        # Create tool definitions for documentation purposes
+        self.tool_definitions = [
+            ToolDefinition(
+                name="list_files",
+                description="List files in a directory"
+            ),
+            ToolDefinition(
+                name="read_file",
+                description="Read the contents of a file"
+            ),
+            ToolDefinition(
+                name="write_file",
+                description="Write content to a file"
+            ),
+            ToolDefinition(
+                name="commit_changes",
+                description="Commit changes to the repository"
+            ),
+            ToolDefinition(
+                name="push_changes",
+                description="Push changes to the remote repository"
+            )
+        ]
 
     @tracer.start_as_current_span("Execute tool")
     def _execute_tool(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -139,7 +154,7 @@ class WebsiteAgent:
         """
         span = trace.get_current_span()
         span.set_attribute("app.instruction", instruction)
-        
+
         # Create the initial prompt
         prompt = f"""
         You are an agent that modifies code in the cynditaylor-com website.
@@ -161,11 +176,11 @@ class WebsiteAgent:
 
         for i in range(max_iterations):
             with tracer.start_as_current_span(f"Iteration {i+1}"):
-                # Generate a response using the LLM with tool executor
-                response = self.llm.generate(
-                    prompt,
-                    tool_executor=self._execute_tool_by_name
-                )
+                # Generate a response using the LLM
+                response = self.llm.generate(prompt)
+
+                # Add the response to the conversation history
+                conversation_history.append({"role": "assistant", "content": response})
 
                 # Check if the response contains a tool call
                 tool_call = self._extract_tool_call(response)

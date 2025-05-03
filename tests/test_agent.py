@@ -1,7 +1,6 @@
 import unittest
 import os
-import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 from src.llm.frank_provider import FrankProvider
 from src.agent.agent import WebsiteAgent
@@ -35,101 +34,98 @@ class TestWebsiteAgent(unittest.TestCase):
         with self.assertRaises(ValueError):
             WebsiteAgent(llm, website_dir="nonexistent_dir")
 
-    def test_list_files_tool(self):
-        """Test the list_files tool."""
+    def test_execute_tool(self):
+        """Test the _execute_tool method."""
         llm = FrankProvider()
         agent = WebsiteAgent(llm, website_dir="test_website")
 
-        result = agent._list_files()
+        # Test with list_files tool
+        result = agent._execute_tool("list_files", {"directory": "."})
         self.assertTrue(result["success"])
-        self.assertIn("index.html", result["files"])
+        # The file path will include the website_dir prefix
+        self.assertIn("test_website/./index.html", result["files"])
 
-    def test_read_file_tool(self):
-        """Test the read_file tool."""
-        llm = FrankProvider()
-        agent = WebsiteAgent(llm, website_dir="test_website")
-
-        result = agent._read_file("index.html")
-        self.assertTrue(result["success"])
-        self.assertIn('<div class="hero-content">', result["content"])
-
-    def test_write_file_tool(self):
-        """Test the write_file tool."""
-        llm = FrankProvider()
-        agent = WebsiteAgent(llm, website_dir="test_website")
-
-        new_content = '<html><body><div class="hero-content"><h2>Title</h2><p>New tagline</p></div></body></html>'
-        result = agent._write_file("index.html", new_content)
-        self.assertTrue(result["success"])
-
-        # Verify the file was updated
-        with open("test_website/index.html", "r") as f:
-            content = f.read()
-        self.assertEqual(content, new_content)
-
-    @patch("src.agent.agent.GitTools")
-    def test_commit_changes_tool(self, mock_git_tools):
-        """Test the commit_changes tool."""
-        # Set up mock
-        mock_git_tools_instance = MagicMock()
-        mock_git_tools.return_value = mock_git_tools_instance
-        mock_git_tools_instance.commit_changes.return_value = (True, "Changes committed")
-
-        llm = FrankProvider()
-        agent = WebsiteAgent(llm, website_dir="test_website")
-
-        result = agent._commit_changes("Test commit")
-        self.assertTrue(result["success"])
-        self.assertEqual(result["message"], "Changes committed")
-
-        # Verify the mock was called
-        mock_git_tools_instance.commit_changes.assert_called_once_with("test_website", "Test commit")
-
-    @patch("src.agent.agent.GitTools")
-    def test_push_changes_tool(self, mock_git_tools):
-        """Test the push_changes tool."""
-        # Set up mock
-        mock_git_tools_instance = MagicMock()
-        mock_git_tools.return_value = mock_git_tools_instance
-        mock_git_tools_instance.push_changes.return_value = (True, "Changes pushed")
-
-        llm = FrankProvider()
-        agent = WebsiteAgent(llm, website_dir="test_website")
-
-        result = agent._push_changes()
-        self.assertTrue(result["success"])
-        self.assertEqual(result["message"], "Changes pushed")
-
-        # Verify the mock was called
-        mock_git_tools_instance.push_changes.assert_called_once_with("test_website", "main")
-
-    @patch("src.agent.agent.WebsiteAgent._list_files")
-    @patch("src.agent.agent.WebsiteAgent._read_file")
-    @patch("src.agent.agent.WebsiteAgent._write_file")
-    @patch("src.agent.agent.WebsiteAgent._commit_changes")
-    def test_execute_instruction(self, mock_commit, mock_write, mock_read, mock_list):
-        """Test executing an instruction."""
-        # Set up mocks
-        mock_list.return_value = {"success": True, "files": ["index.html"]}
-        mock_read.return_value = {
-            "success": True,
-            "content": '<html><body><div class="hero-content"><h2>Title</h2><p>Old tagline</p></div></body></html>'
-        }
-        mock_write.return_value = {"success": True, "message": "File written: index.html"}
-        mock_commit.return_value = {"success": True, "message": "Changes committed"}
-
-        # Create a custom FrankProvider that returns predefined responses
+    def test_execute_instruction_with_tool_call(self):
+        """Test executing an instruction that results in a tool call."""
+        # Create a custom FrankProvider that returns a response with a tool call
         class TestFrankProvider(FrankProvider):
-            def generate(self, prompt, **kwargs):
-                return "I've successfully updated the hero section with the new tagline and committed the changes."
+            def generate(self, *args, **kwargs):
+                return """I'll help you with that. First, I need to see what files are available.
+
+```tool
+{
+  "name": "list_files",
+  "arguments": {
+    "directory": "."
+  }
+}
+```"""
+
+        # Create a mock for the _execute_tool method
+        original_execute_tool = WebsiteAgent._execute_tool
+
+        try:
+            # Replace _execute_tool with a mock that returns a predefined result
+            WebsiteAgent._execute_tool = MagicMock(return_value={
+                "success": True,
+                "files": ["index.html", "styles.css"]
+            })
+
+            llm = TestFrankProvider()
+            agent = WebsiteAgent(llm, website_dir="test_website")
+
+            # Execute the instruction
+            result = agent.execute_instruction("Update the website")
+
+            # Verify the result contains the expected information
+            self.assertIn("list_files", result)
+
+        finally:
+            # Restore the original method
+            WebsiteAgent._execute_tool = original_execute_tool
+
+    def test_execute_instruction_without_tool_call(self):
+        """Test executing an instruction that doesn't result in a tool call."""
+        # Create a custom FrankProvider that returns a response without a tool call
+        class TestFrankProvider(FrankProvider):
+            def generate(self, *args, **kwargs):
+                return "I've analyzed the instruction and completed the task."
 
         llm = TestFrankProvider()
         agent = WebsiteAgent(llm, website_dir="test_website")
 
-        result = agent.execute_instruction("Update the hero section with a new tagline")
+        # Execute the instruction
+        result = agent.execute_instruction("Update the website")
 
-        # Verify the result
-        self.assertIn("successfully updated", result.lower())
+        # Verify the result is the expected response
+        self.assertEqual(result, "I've analyzed the instruction and completed the task.")
+
+    def test_extract_tool_call(self):
+        """Test extracting a tool call from a response."""
+        llm = FrankProvider()
+        agent = WebsiteAgent(llm, website_dir="test_website")
+
+        # Test with a valid tool call
+        response = """I'll help you with that. First, I need to see what files are available.
+
+```tool
+{
+  "name": "list_files",
+  "arguments": {
+    "directory": "."
+  }
+}
+```"""
+
+        tool_call = agent._extract_tool_call(response)
+        self.assertIsNotNone(tool_call)
+        self.assertEqual(tool_call["name"], "list_files")
+        self.assertEqual(tool_call["arguments"], {"directory": "."})
+
+        # Test with no tool call
+        response = "I'll help you with that. Let me think about it."
+        tool_call = agent._extract_tool_call(response)
+        self.assertIsNone(tool_call)
 
 
 if __name__ == "__main__":
