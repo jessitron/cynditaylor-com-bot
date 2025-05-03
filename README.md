@@ -65,15 +65,12 @@ This project implements the agent that processes requests, makes the appropriate
 
 - `src/`: Source code directory
   - `main.py`: Entry point that initializes the agent and passes instructions
-  - `main_with_tools.py`: Alternative entry point using the tools-based agent
   - `config.py`: Configuration settings
   - `llm/`: Directory for LLM-related code
     - `provider.py`: Abstract base class for LLM providers
-    - `frank_provider.py`: Implementation for the "Frank" LLM
-    - `frank_provider_with_tools.py`: Implementation for the "Frank" LLM with tools support
+    - `frank_provider.py`: Implementation for the "Frank" LLM with tools support
   - `agent/`: Directory for agent-related code
-    - `agent.py`: Main agent implementation
-    - `agent_with_tools.py`: Alternative agent implementation using tools
+    - `agent.py`: Main agent implementation using tools
     - `tools/`: Directory for tools the agent can use
       - `file_tools.py`: Tools for reading/writing files
       - `git_tools.py`: Tools for git operations
@@ -124,17 +121,10 @@ Or provide a custom instruction:
 ./run.py "Update the contact information to include a new email address"
 ```
 
-You can also use the tools-based version:
+Alternatively, you can run the module directly:
 
 ```
-./run_with_tools.py "Update the contact information to include a new email address"
-```
-
-Alternatively, you can run the modules directly:
-
-```
-python -m src.main
-python -m src.main_with_tools
+python -m src.main "Update the contact information to include a new email address"
 ```
 
 ## Testing
