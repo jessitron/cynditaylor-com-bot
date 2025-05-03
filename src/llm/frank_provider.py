@@ -45,7 +45,6 @@ class FrankProvider(LLMProvider):
         self.tools = {}
         self.conversation_history = []
 
-    @tracer.start_as_current_span("Register tool")
     def register_tool(self, tool: ToolDefinition):
         """
         Register a tool that the LLM can use.

@@ -40,60 +40,58 @@ class WebsiteAgent:
 
     def _initialize_tools(self):
         """Initialize tool instances."""
-        with tracer.start_as_current_span("Initialize tools"):
             # File tools
-            self.list_files_tool = ListFilesTool()
-            self.read_file_tool = ReadFileTool()
-            self.write_file_tool = WriteFileTool()
+        self.list_files_tool = ListFilesTool()
+        self.read_file_tool = ReadFileTool()
+        self.write_file_tool = WriteFileTool()
 
-            # Git tools
-            self.commit_changes_tool = CommitChangesTool()
-            self.push_changes_tool = PushChangesTool()
+        # Git tools
+        self.commit_changes_tool = CommitChangesTool()
+        self.push_changes_tool = PushChangesTool()
 
-            # Add tools to the tools dictionary
-            for tool in [
-                self.list_files_tool,
-                self.read_file_tool,
-                self.write_file_tool,
-                self.commit_changes_tool,
-                self.push_changes_tool
-            ]:
-                self.tools[tool.name] = tool
+        # Add tools to the tools dictionary
+        for tool in [
+            self.list_files_tool,
+            self.read_file_tool,
+            self.write_file_tool,
+            self.commit_changes_tool,
+            self.push_changes_tool
+        ]:
+            self.tools[tool.name] = tool
 
     def _register_tools(self):
         """Register tools with the LLM provider."""
-        with tracer.start_as_current_span("Register tools with LLM"):
-            # File tools
-            self.llm.register_tool(ToolDefinition(
-                name="list_files",
-                description="List files in a directory",
-                function=lambda **kwargs: self._execute_tool("list_files", kwargs)
-            ))
+        # File tools
+        self.llm.register_tool(ToolDefinition(
+            name="list_files",
+            description="List files in a directory",
+            function=lambda **kwargs: self._execute_tool("list_files", kwargs)
+        ))
 
-            self.llm.register_tool(ToolDefinition(
-                name="read_file",
-                description="Read the contents of a file",
-                function=lambda **kwargs: self._execute_tool("read_file", kwargs)
-            ))
+        self.llm.register_tool(ToolDefinition(
+            name="read_file",
+            description="Read the contents of a file",
+            function=lambda **kwargs: self._execute_tool("read_file", kwargs)
+        ))
 
-            self.llm.register_tool(ToolDefinition(
-                name="write_file",
-                description="Write content to a file",
-                function=lambda **kwargs: self._execute_tool("write_file", kwargs)
-            ))
+        self.llm.register_tool(ToolDefinition(
+            name="write_file",
+            description="Write content to a file",
+            function=lambda **kwargs: self._execute_tool("write_file", kwargs)
+        ))
 
-            # Git tools
-            self.llm.register_tool(ToolDefinition(
-                name="commit_changes",
-                description="Commit changes to the repository",
-                function=lambda **kwargs: self._execute_tool("commit_changes", kwargs)
-            ))
+        # Git tools
+        self.llm.register_tool(ToolDefinition(
+            name="commit_changes",
+            description="Commit changes to the repository",
+            function=lambda **kwargs: self._execute_tool("commit_changes", kwargs)
+        ))
 
-            self.llm.register_tool(ToolDefinition(
-                name="push_changes",
-                description="Push changes to the remote repository",
-                function=lambda **kwargs: self._execute_tool("push_changes", kwargs)
-            ))
+        self.llm.register_tool(ToolDefinition(
+            name="push_changes",
+            description="Push changes to the remote repository",
+            function=lambda **kwargs: self._execute_tool("push_changes", kwargs)
+        ))
 
     @tracer.start_as_current_span("Execute tool")
     def _execute_tool(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -128,8 +126,6 @@ class WebsiteAgent:
         tool = self.tools[tool_name]
         return tool(**args)
 
-
-
     @tracer.start_as_current_span("Execute instruction")
     def execute_instruction(self, instruction: str) -> str:
         """
@@ -141,66 +137,67 @@ class WebsiteAgent:
         Returns:
             The final response from the LLM
         """
-        with tracer.start_as_current_span("Create prompt"):
-            # Create the initial prompt
-            prompt = f"""
-            You are an agent that modifies code in the cynditaylor-com website.
-            You have access to tools that allow you to list files, read and write file contents, and commit changes to the repository.
+        span = trace.get_current_span()
+        span.set_attribute("app.instruction", instruction)
+        
+        # Create the initial prompt
+        prompt = f"""
+        You are an agent that modifies code in the cynditaylor-com website.
+        You have access to tools that allow you to list files, read and write file contents, and commit changes to the repository.
 
-            INSTRUCTION:
-            {instruction}
+        INSTRUCTION:
+        {instruction}
 
-            Please analyze the instruction and use the available tools to make the necessary changes.
-            When you're done, provide a summary of what you did.
-            """
+        Please analyze the instruction and use the available tools to make the necessary changes.
+        When you're done, provide a summary of what you did.
+        """
 
         # Start the conversation loop
-        with tracer.start_as_current_span("LLM conversation loop"):
-            max_iterations = 10
-            conversation_history = []
+        max_iterations = 10
+        conversation_history = []
 
-            # Add the initial prompt to the conversation history
-            conversation_history.append({"role": "user", "content": prompt})
+        # Add the initial prompt to the conversation history
+        conversation_history.append({"role": "user", "content": prompt})
 
-            for i in range(max_iterations):
-                with tracer.start_as_current_span(f"Iteration {i+1}"):
-                    # Generate a response using the LLM with tool executor
-                    response = self.llm.generate(
-                        prompt,
-                        tool_executor=self._execute_tool_by_name
-                    )
+        for i in range(max_iterations):
+            with tracer.start_as_current_span(f"Iteration {i+1}"):
+                # Generate a response using the LLM with tool executor
+                response = self.llm.generate(
+                    prompt,
+                    tool_executor=self._execute_tool_by_name
+                )
 
-                    # Check if the response contains a tool call
-                    tool_call = self._extract_tool_call(response)
+                # Check if the response contains a tool call
+                tool_call = self._extract_tool_call(response)
 
-                    if tool_call:
-                        # Execute the tool
-                        with tracer.start_as_current_span(f"Execute tool: {tool_call['name']}"):
-                            tool_name = tool_call["name"]
-                            tool_args = tool_call["arguments"]
+                if tool_call:
+                    # Execute the tool
+                    with tracer.start_as_current_span(f"Execute tool: {tool_call['name']}"):
+                        tool_name = tool_call["name"]
+                        tool_args = tool_call["arguments"]
 
-                            tool_result = self._execute_tool_by_name(tool_name, tool_args)
+                        tool_result = self._execute_tool_by_name(tool_name, tool_args)
 
-                            # Add the tool result to the conversation history
-                            conversation_history.append({
-                                "role": "tool",
-                                "name": tool_name,
-                                "content": tool_result
-                            })
+                        # Add the tool result to the conversation history
+                        conversation_history.append({
+                            "role": "tool",
+                            "name": tool_name,
+                            "content": tool_result
+                        })
 
-                            # Update the prompt with the tool result
-                            prompt = self._update_prompt_with_tool_result(
-                                prompt,
-                                tool_name,
-                                tool_args,
-                                tool_result
-                            )
-                    else:
-                        # No tool call, return the final response
-                        return response
+                        # Update the prompt with the tool result
+                        prompt = self._update_prompt_with_tool_result(
+                            prompt,
+                            tool_name,
+                            tool_args,
+                            tool_result
+                        )
+                else:
+                    # No tool call, return the final response
+                    return response
 
-            # If we reach the maximum number of iterations, return the last response
-            return response
+        # If we reach the maximum number of iterations, return the last response
+        return response
 
     def _execute_tool_by_name(self, tool_name: str, tool_args: Dict[str, Any]) -> Dict[str, Any]:
         """
