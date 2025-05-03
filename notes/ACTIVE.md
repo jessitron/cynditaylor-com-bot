@@ -62,62 +62,28 @@ I propose a JSON-based format for the conversation history file that Frank can u
 
 [x] make the agent output the conversation history in this format.
 
-Put your plan for this here:
+Now let's have some fun.
 
-## Plan for Implementing Conversation History Output
+[x] make a script that reads the conversation history and prints it to the terminal like in cowsay,
 
-To make the agent output conversation history in the proposed format, we'll need to:
+- with an ascii art cow on the left playing the role of our agent saying the prompt,
+- and an ascii art dragon playing the role of Frank the LLM on the right.
+- When the cow says the prompt, it says only the new portion
 
-1. **Create a Conversation Logger Module**:
-   - Implement a `ConversationLogger` class that will track and record all exchanges between the agent and the LLM
-   - Add methods to calculate and store hashes of prompts
-   - Include functionality to detect and record only the new portions of follow-up prompts
+The script has been implemented in `src/conversation/visualize.py` and can be run using the `./visualize-conversation` wrapper script. It reads a conversation history file in the JSON format we defined and displays each exchange with:
 
-2. **Modify the Agente**:
-   - Update the agent to pass all prompts through the logger
-   - Intercept and record all responses and tool calls
+1. A cow (agent) on the left showing the prompt (only the new portion if available)
+2. A dragon (Frank LLM) on the right showing the response
+3. Tool calls and their results displayed below each exchange
 
-3. **Implement Hash Calculation**:
-   - Add a utility function to generate consistent SHA-256 hashes of prompts
-   - Ensure the hashing method is deterministic and can be reproduced when verifying prompts
+Usage:
+```
+./visualize-conversation [file]
+```
 
-4. **Add Conversation History File I/O**:
-   - Create functions to save the conversation history to JSON files
-   - Make a deterministic name for each file based on the date and time
+If no file is provided, it will use the most recent conversation history file in the `conversation_history` directory.
 
-6. **Configuration**:
-   - always record conversations to a hard-coded relative path
-   - ignore this directory in git
-
-7. **Testing Strategy**:
-   - Create unit tests for the hash calculation and matching logic
-
-8. **Documentation**:
-   - Don't.
-
-9. **Cleanup**:
-   - remove any exising conversation-history-saving code
-
-[x] implement the conversation logger module
-
-The conversation logger module has been implemented with the following components:
-
-1. `src/conversation/logger.py`: The main ConversationLogger class that tracks and records conversations
-2. `src/conversation/hash_util.py`: Utility functions for calculating hashes of prompts
-3. Integration with the FrankProvider to log exchanges
-4. Integration with the WebsiteAgent to log tool calls
-5. Unit tests for the conversation logger and hash utility
-
-[x] test the conversation logger implementation
-
-The conversation logger implementation has been tested and all tests are passing. The tests cover:
-
-1. Initialization of the ConversationLogger
-2. Hash calculation
-3. Finding new portions of prompts
-4. Logging exchanges
-5. Logging tool calls
-6. Saving conversation history to files
+DO NOT DO THIS YET:
 
 [] implement Frank LLM to read conversation history and replay responses
 
