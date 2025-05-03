@@ -94,9 +94,30 @@ To make the agent output conversation history in the proposed format, we'll need
 
 8. **Documentation**:
    - Don't.
-   
+
 9. **Cleanup**:
    - remove any exising conversation-history-saving code
 
-[] implement the conversation logger module
+[x] implement the conversation logger module
+
+The conversation logger module has been implemented with the following components:
+
+1. `src/conversation/logger.py`: The main ConversationLogger class that tracks and records conversations
+2. `src/conversation/hash_util.py`: Utility functions for calculating hashes of prompts
+3. Integration with the FrankProvider to log exchanges
+4. Integration with the WebsiteAgent to log tool calls
+5. Unit tests for the conversation logger and hash utility
+
+[x] test the conversation logger implementation
+
+The conversation logger implementation has been tested and all tests are passing. The tests cover:
+
+1. Initialization of the ConversationLogger
+2. Hash calculation
+3. Finding new portions of prompts
+4. Logging exchanges
+5. Logging tool calls
+6. Saving conversation history to files
+
+[] implement Frank LLM to read conversation history and replay responses
 

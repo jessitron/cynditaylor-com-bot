@@ -65,7 +65,7 @@ class WebsiteAgent:
             self.push_changes_tool
         ]:
             self.tools[tool.name] = tool
-       
+
         # Create tool definitions for documentation purposes
         self.tool_definitions = [
             ToolDefinition(
@@ -133,6 +133,7 @@ class WebsiteAgent:
         # Start the conversation loop
         max_iterations = 10
         conversation_history = []
+        current_exchange_id = None
 
         # Add the initial prompt to the conversation history
         conversation_history.append({"role": "user", "content": prompt})
@@ -147,6 +148,10 @@ class WebsiteAgent:
 
                 # Add the response to the conversation history
                 conversation_history.append({"role": "assistant", "content": response})
+
+                # Get the current exchange ID from the conversation logger
+                if hasattr(self.llm, 'conversation_logger'):
+                    current_exchange_id = f"exchange-{len(self.llm.conversation_logger.exchanges)}"
 
                 # Check if the response contains a tool call
                 tool_call = self._extract_tool_call(response)
@@ -164,6 +169,15 @@ class WebsiteAgent:
                         "name": tool_name,
                         "content": tool_result
                     })
+
+                    # Log the tool call in the conversation logger
+                    if hasattr(self.llm, 'conversation_logger') and current_exchange_id:
+                        self.llm.conversation_logger.log_tool_call(
+                            current_exchange_id,
+                            tool_name,
+                            tool_args,
+                            tool_result
+                        )
 
                     # Update the prompt with the tool result
                     prompt = self._update_prompt_with_tool_result(

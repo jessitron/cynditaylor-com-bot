@@ -3,6 +3,7 @@ import re
 from opentelemetry import trace
 
 from .provider import LLMProvider
+from src.conversation.logger import ConversationLogger
 
 tracer = trace.get_tracer("cynditaylor-com-bot")
 
@@ -11,13 +12,23 @@ class FrankProvider(LLMProvider):
 
     def __init__(self, model: str = "default"):
         self.model = model
+        self.conversation_logger = ConversationLogger(output_dir="conversation_history")
 
-    def generate(self, prompt: str, **_) -> str:
+    def generate(self, prompt: str, **kwargs) -> str:
         # Extract the instruction from the prompt
         instruction = self._extract_instruction(prompt)
 
         # Generate a response based on the instruction
         response = self._generate_response(instruction)
+
+        # Log the exchange
+        metadata = {
+            "model": self.model,
+            "temperature": kwargs.get("temperature", 0.7),
+            "max_tokens": kwargs.get("max_tokens", 1000),
+        }
+
+        self.conversation_logger.log_exchange(prompt, response, metadata)
 
         return response
 
