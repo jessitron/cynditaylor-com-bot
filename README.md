@@ -63,16 +63,20 @@ This project implements the agent that processes requests, makes the appropriate
 
 ### Project Structure
 
-- `main.py`: Entry point that initializes the agent and passes instructions
-- `llm/`: Directory for LLM-related code
-  - `provider.py`: Abstract base class for LLM providers
-  - `frank_provider.py`: Implementation for the "Frank" LLM
-- `agent/`: Directory for agent-related code
-  - `agent.py`: Main agent implementation
-  - `tools/`: Directory for tools the agent can use
-    - `file_tools.py`: Tools for reading/writing files
-    - `git_tools.py`: Tools for git operations
-- `config.py`: Configuration settings
+- `src/`: Source code directory
+  - `main.py`: Entry point that initializes the agent and passes instructions
+  - `main_with_tools.py`: Alternative entry point using the tools-based agent
+  - `config.py`: Configuration settings
+  - `llm/`: Directory for LLM-related code
+    - `provider.py`: Abstract base class for LLM providers
+    - `frank_provider.py`: Implementation for the "Frank" LLM
+    - `frank_provider_with_tools.py`: Implementation for the "Frank" LLM with tools support
+  - `agent/`: Directory for agent-related code
+    - `agent.py`: Main agent implementation
+    - `agent_with_tools.py`: Alternative agent implementation using tools
+    - `tools/`: Directory for tools the agent can use
+      - `file_tools.py`: Tools for reading/writing files
+      - `git_tools.py`: Tools for git operations
 - `tests/`: Unit tests
 - `requirements.txt`: Project dependencies
 
@@ -111,13 +115,26 @@ To add a new LLM provider:
 Run the agent with a default instruction:
 
 ```
-python main.py
+./run.py
 ```
 
 Or provide a custom instruction:
 
 ```
-python main.py "Update the contact information to include a new email address"
+./run.py "Update the contact information to include a new email address"
+```
+
+You can also use the tools-based version:
+
+```
+./run_with_tools.py "Update the contact information to include a new email address"
+```
+
+Alternatively, you can run the modules directly:
+
+```
+python -m src.main
+python -m src.main_with_tools
 ```
 
 ## Testing
