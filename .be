@@ -1,9 +1,0 @@
-export HONEYCOMB_API_KEY=aDc4hKIfkNuyNk4ZWp1M8H
-
-export OTEL_SERVICE_NAME="cynditaylor-com-bot"
-export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
-export OTEL_EXPORTER_OTLP_ENDPOINT="https://api.honeycomb.io:443" # US instance
-#export OTEL_EXPORTER_OTLP_ENDPOINT="https://api.eu1.honeycomb.io:443" # EU instance
-export OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=${HONEYCOMB_API_KEY}"
-export OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true
-
