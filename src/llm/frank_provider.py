@@ -2,7 +2,11 @@ import json
 import re
 from typing import Dict, Any, List, Optional, Callable
 
+from opentelemetry import trace
+
 from .provider import LLMProvider
+
+tracer = trace.get_tracer("cynditaylor-com-bot")
 
 
 class ToolDefinition:
@@ -41,6 +45,7 @@ class FrankProvider(LLMProvider):
         self.tools = {}
         self.conversation_history = []
 
+    @tracer.start_as_current_span("Register tool")
     def register_tool(self, tool: ToolDefinition):
         """
         Register a tool that the LLM can use.
@@ -50,57 +55,63 @@ class FrankProvider(LLMProvider):
         """
         self.tools[tool.name] = tool
 
-    def generate(self, prompt: str, **kwargs) -> str:
+    @tracer.start_as_current_span("Generate LLM response")
+    def generate(self, prompt: str, tool_executor=None, **_) -> str:
         """
         Generate a response from Frank LLM based on the prompt.
 
         Args:
             prompt: The input prompt to send to the LLM
-            **kwargs: Additional parameters for the API call
+            tool_executor: Optional function to execute tools
+            **_: Additional parameters for the API call (ignored)
 
         Returns:
             The generated text response from the LLM
         """
-        # Reset conversation history for a new prompt
-        self.conversation_history = []
+        with tracer.start_as_current_span("Reset conversation history"):
+            # Reset conversation history for a new prompt
+            self.conversation_history = []
 
-        # Add the initial prompt to the conversation history
-        self.conversation_history.append({"role": "user", "content": prompt})
+            # Add the initial prompt to the conversation history
+            self.conversation_history.append({"role": "user", "content": prompt})
 
         # Start the conversation loop
         for i in range(self.max_iterations):
-            # Generate a response based on the conversation history
-            response = self._generate_response()
+            with tracer.start_as_current_span(f"Conversation iteration {i+1}"):
+                # Generate a response based on the conversation history
+                with tracer.start_as_current_span("Generate response"):
+                    response = self._generate_response()
 
-            # Add the response to the conversation history
-            self.conversation_history.append({"role": "assistant", "content": response})
+                # Add the response to the conversation history
+                self.conversation_history.append({"role": "assistant", "content": response})
 
-            # Check if the response contains a tool call
-            tool_call = self._extract_tool_call(response)
-            if tool_call:
-                # Execute the tool
-                tool_name = tool_call["name"]
-                tool_args = tool_call["arguments"]
+                # Check if the response contains a tool call
+                with tracer.start_as_current_span("Extract tool call"):
+                    tool_call = self._extract_tool_call(response)
 
-                if tool_name in self.tools:
-                    tool_result = self.tools[tool_name].function(**tool_args)
+                if tool_call:
+                    # Get tool information
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["arguments"]
 
-                    # Add the tool result to the conversation history
-                    self.conversation_history.append({
-                        "role": "tool",
-                        "name": tool_name,
-                        "content": json.dumps(tool_result)
-                    })
+                    # If a tool executor is provided, use it to execute the tool
+                    if tool_executor:
+                        with tracer.start_as_current_span(f"Execute tool: {tool_name}"):
+                            tool_result = tool_executor(tool_name, tool_args)
+
+                            # Add the tool result to the conversation history
+                            self.conversation_history.append({
+                                "role": "tool",
+                                "name": tool_name,
+                                "content": json.dumps(tool_result)
+                            })
+                    else:
+                        # No tool executor provided, return the response with the tool call
+                        # This allows the agent to handle tool execution
+                        return response
                 else:
-                    # Tool not found
-                    self.conversation_history.append({
-                        "role": "tool",
-                        "name": tool_name,
-                        "content": json.dumps({"error": f"Tool '{tool_name}' not found"})
-                    })
-            else:
-                # No tool call, return the final response
-                return response
+                    # No tool call, return the final response
+                    return response
 
         # If we reach the maximum number of iterations, return the last response
         return self.conversation_history[-1]["content"]
@@ -112,29 +123,34 @@ class FrankProvider(LLMProvider):
         Returns:
             The generated response
         """
-        # Get the last user message
-        last_user_message = None
-        for message in reversed(self.conversation_history):
-            if message["role"] == "user":
-                last_user_message = message["content"]
-                break
+        with tracer.start_as_current_span("Get last user message"):
+            # Get the last user message
+            last_user_message = None
+            for message in reversed(self.conversation_history):
+                if message["role"] == "user":
+                    last_user_message = message["content"]
+                    break
 
-        if not last_user_message:
-            return "I don't have any instructions to work with."
+            if not last_user_message:
+                return "I don't have any instructions to work with."
 
-        # Check if this is the first response
-        is_first_response = all(message["role"] != "assistant" for message in self.conversation_history)
+        with tracer.start_as_current_span("Check if first response"):
+            # Check if this is the first response
+            is_first_response = all(message["role"] != "assistant" for message in self.conversation_history)
 
         # If this is the first response, analyze the instruction
         if is_first_response:
-            return self._handle_initial_instruction(last_user_message)
+            with tracer.start_as_current_span("Handle initial instruction"):
+                return self._handle_initial_instruction(last_user_message)
 
-        # Check if we have tool results in the history
-        tool_results = [message for message in self.conversation_history if message["role"] == "tool"]
+        with tracer.start_as_current_span("Check for tool results"):
+            # Check if we have tool results in the history
+            tool_results = [message for message in self.conversation_history if message["role"] == "tool"]
 
         if tool_results:
             # Process the tool results
-            return self._handle_tool_results(tool_results[-1], last_user_message)
+            with tracer.start_as_current_span("Handle tool results"):
+                return self._handle_tool_results(tool_results[-1], last_user_message)
 
         # Default response
         return "I need more information to proceed."
@@ -463,19 +479,22 @@ Is there anything else you'd like me to help with?"""
         Returns:
             A dictionary containing the tool name and arguments, or None if no tool call is found
         """
-        tool_match = re.search(r'```tool\s*(.*?)```', response, re.DOTALL)
-        if not tool_match:
-            return None
+        with tracer.start_as_current_span("Extract tool call from response"):
+            tool_match = re.search(r'```tool\s*(.*?)```', response, re.DOTALL)
+            if not tool_match:
+                return None
 
-        try:
-            tool_json = json.loads(tool_match.group(1))
-            return {
-                "name": tool_json.get("name", ""),
-                "arguments": tool_json.get("arguments", {})
-            }
-        except json.JSONDecodeError:
-            return None
+            try:
+                with tracer.start_as_current_span("Parse tool JSON"):
+                    tool_json = json.loads(tool_match.group(1))
+                    return {
+                        "name": tool_json.get("name", ""),
+                        "arguments": tool_json.get("arguments", {})
+                    }
+            except json.JSONDecodeError:
+                return None
 
+    @tracer.start_as_current_span("Get LLM provider name")
     def get_name(self) -> str:
         """
         Get the name of the LLM provider.
