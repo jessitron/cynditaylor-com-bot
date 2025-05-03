@@ -45,6 +45,7 @@ I propose a JSON-based format for the conversation history file that Frank can u
       "id": "exchange-2",
       "prompt": {
         "text": "Follow-up prompt including previous context",
+        "new_portion": "only the text that was not in the previous prompt",
         "hash": "sha256-hash-of-prompt-for-verification",
         "metadata": {
           "temperature": 0.7,
@@ -59,23 +60,7 @@ I propose a JSON-based format for the conversation history file that Frank can u
 }
 ```
 
-### Key Features:
+[] make the agent output the conversation history in this format.
 
-1. **Prompt Verification**: Each prompt includes a hash that Frank can use to verify if the incoming prompt matches the expected one.
-
-2. **Tool Calls Support**: The format captures any tool calls made during the conversation, including parameters and results.
-
-3. **Metadata**: Includes relevant LLM parameters that might affect the response.
-
-4. **Versioning**: The format includes a version number to allow for future enhancements.
-
-### Implementation Approach:
-
-When Frank receives a prompt:
-1. Calculate the hash of the incoming prompt
-2. Search the conversation history for a matching prompt hash
-3. If found, replay the corresponding response
-4. If not found, return an error indicating the prompt doesn't match any in the history
-
-This format allows for accurate replay of complex conversations while ensuring the prompts match exactly what's expected.
+Put your plan for this here:
 
