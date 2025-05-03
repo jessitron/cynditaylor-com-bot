@@ -31,6 +31,7 @@ pip install -r requirements.txt
 
 ```
 export OTEL_SERVICE_NAME="your-service-name"
+export OTEL_TRACES_EXPORTER="otlp"
 export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
 export OTEL_EXPORTER_OTLP_ENDPOINT="https://api.honeycomb.io:443"
 export OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=$HONEYCOMB_API_KEY"
