@@ -1,7 +1,7 @@
 import unittest
 import json
 
-from llm.frank_provider import FrankProvider
+from src.llm.frank_provider import FrankProvider
 
 
 class TestFrankProvider(unittest.TestCase):
