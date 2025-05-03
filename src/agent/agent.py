@@ -1,17 +1,20 @@
 import os
-import json
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional
 
 from src.llm.frank_provider import FrankProvider, ToolDefinition
 from src.agent.tools.file_tools import FileTools
 from src.agent.tools.git_tools import GitTools
 
+from opentelemetry import trace
+
+tracer = trace.get_tracer("cynditaylor-com-bot")
 
 class WebsiteAgent:
     """
     Agent that can modify code in the cynditaylor-com website using an LLM with tools.
     """
 
+    @tracer.start_as_current_span("Initialize agent")
     def __init__(self, llm_provider: FrankProvider, website_dir: str = "cynditaylor-com"):
         """
         Initialize the website agent.
@@ -60,6 +63,7 @@ class WebsiteAgent:
             function=self._commit_changes
         ))
 
+        # TODO: remove this tool
         self.llm.register_tool(ToolDefinition(
             name="push_changes",
             description="Push changes to the remote repository",
@@ -92,6 +96,7 @@ class WebsiteAgent:
                 "message": str(e)
             }
 
+    # TODO: move all tools to their own classes in their own files in a tools module
     def _read_file(self, file_path: str) -> Dict[str, Any]:
         """
         Read the contents of a file.
@@ -189,6 +194,7 @@ class WebsiteAgent:
                 "message": str(e)
             }
 
+    @tracer.start_as_current_span("Execute instruction")
     def execute_instruction(self, instruction: str) -> str:
         """
         Execute an instruction using the LLM with tools.

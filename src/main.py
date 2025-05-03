@@ -7,7 +7,6 @@ from src.config import Config
 from src.llm.frank_provider import FrankProvider
 from src.agent.agent import WebsiteAgent
 
-
 def setup_logging():
     """Set up logging configuration."""
     logging.basicConfig(
