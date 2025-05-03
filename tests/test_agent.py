@@ -3,33 +3,8 @@ import os
 import json
 from unittest.mock import patch, MagicMock
 
-from src.llm.provider import LLMProvider
+from src.llm.frank_provider import FrankProvider
 from src.agent.agent import WebsiteAgent
-
-
-class MockLLMProvider(LLMProvider):
-    """Mock LLM provider for testing."""
-
-    def __init__(self, responses=None):
-        self.responses = responses or {}
-        self.calls = []
-
-    def generate(self, prompt, **kwargs):
-        self.calls.append(prompt)
-
-        # Return a predefined response if available, otherwise a default
-        for key, response in self.responses.items():
-            if key in prompt:
-                return response
-
-        return json.dumps({
-            "files_to_modify": ["index.html"],
-            "actions": ["Update the hero section with a new tagline"],
-            "reasoning": "The instruction asks to update the hero section"
-        })
-
-    def get_name(self):
-        return "MockLLM"
 
 
 class TestWebsiteAgent(unittest.TestCase):
@@ -38,7 +13,7 @@ class TestWebsiteAgent(unittest.TestCase):
         # Create a temporary directory structure for testing
         os.makedirs("test_website", exist_ok=True)
         with open("test_website/index.html", "w") as f:
-            f.write("<html><body><div class='hero'>Old content</div></body></html>")
+            f.write('<html><body><div class="hero-content"><h2>Title</h2><p>Old tagline</p></div></body></html>')
 
     def tearDown(self):
         # Clean up the temporary directory
@@ -49,74 +24,112 @@ class TestWebsiteAgent(unittest.TestCase):
 
     def test_init(self):
         """Test initialization of WebsiteAgent."""
-        llm = MockLLMProvider()
+        llm = FrankProvider()
         agent = WebsiteAgent(llm, website_dir="test_website")
         self.assertEqual(agent.website_dir, "test_website")
         self.assertEqual(agent.llm, llm)
 
     def test_init_with_nonexistent_dir(self):
         """Test initialization with non-existent directory raises ValueError."""
-        llm = MockLLMProvider()
+        llm = FrankProvider()
         with self.assertRaises(ValueError):
             WebsiteAgent(llm, website_dir="nonexistent_dir")
 
-    @patch("src.agent.agent.FileTools")
-    @patch("src.agent.agent.GitTools")
-    def test_process_instruction(self, mock_git_tools, mock_file_tools):
-        """Test processing an instruction."""
-        # Set up mocks
-        mock_file_tools_instance = MagicMock()
-        mock_file_tools.return_value = mock_file_tools_instance
-        mock_file_tools_instance.file_exists.return_value = True
-        mock_file_tools_instance.read_file.return_value = "<html><body><div class='hero'>Old content</div></body></html>"
-        mock_file_tools_instance.write_file.return_value = True
+    def test_list_files_tool(self):
+        """Test the list_files tool."""
+        llm = FrankProvider()
+        agent = WebsiteAgent(llm, website_dir="test_website")
 
+        result = agent._list_files()
+        self.assertTrue(result["success"])
+        self.assertIn("index.html", result["files"])
+
+    def test_read_file_tool(self):
+        """Test the read_file tool."""
+        llm = FrankProvider()
+        agent = WebsiteAgent(llm, website_dir="test_website")
+
+        result = agent._read_file("index.html")
+        self.assertTrue(result["success"])
+        self.assertIn('<div class="hero-content">', result["content"])
+
+    def test_write_file_tool(self):
+        """Test the write_file tool."""
+        llm = FrankProvider()
+        agent = WebsiteAgent(llm, website_dir="test_website")
+
+        new_content = '<html><body><div class="hero-content"><h2>Title</h2><p>New tagline</p></div></body></html>'
+        result = agent._write_file("index.html", new_content)
+        self.assertTrue(result["success"])
+
+        # Verify the file was updated
+        with open("test_website/index.html", "r") as f:
+            content = f.read()
+        self.assertEqual(content, new_content)
+
+    @patch("src.agent.agent.GitTools")
+    def test_commit_changes_tool(self, mock_git_tools):
+        """Test the commit_changes tool."""
+        # Set up mock
         mock_git_tools_instance = MagicMock()
         mock_git_tools.return_value = mock_git_tools_instance
         mock_git_tools_instance.commit_changes.return_value = (True, "Changes committed")
 
-        # Create agent with mock LLM
-        llm = MockLLMProvider(responses={
-            "Please provide the complete new content": "<html><body><div class='hero'>New content</div></body></html>"
-        })
+        llm = FrankProvider()
         agent = WebsiteAgent(llm, website_dir="test_website")
 
-        # Process an instruction
-        result = agent.process_instruction("Update the hero section")
+        result = agent._commit_changes("Test commit")
+        self.assertTrue(result["success"])
+        self.assertEqual(result["message"], "Changes committed")
 
-        # Verify the result
-        self.assertEqual(result["instruction"], "Update the hero section")
-        self.assertEqual(len(result["results"]), 2)  # One file modification + one commit
-        self.assertTrue(result["results"][0]["success"])
-        self.assertEqual(result["results"][0]["file"], "index.html")
-        self.assertTrue(result["results"][1]["success"])
-        self.assertEqual(result["results"][1]["action"], "commit")
+        # Verify the mock was called
+        mock_git_tools_instance.commit_changes.assert_called_once_with("test_website", "Test commit")
 
-        # Verify the LLM was called
-        self.assertEqual(len(llm.calls), 2)  # Analysis + modification
-
-    @patch("src.agent.agent.WebsiteAgent.process_instruction")
-    def test_execute_instruction(self, mock_process_instruction):
-        """Test executing an instruction and generating a summary."""
+    @patch("src.agent.agent.GitTools")
+    def test_push_changes_tool(self, mock_git_tools):
+        """Test the push_changes tool."""
         # Set up mock
-        mock_process_instruction.return_value = {
-            "instruction": "Test instruction",
-            "results": [{"file": "index.html", "success": True}],
-            "llm_provider": "MockLLM"
-        }
+        mock_git_tools_instance = MagicMock()
+        mock_git_tools.return_value = mock_git_tools_instance
+        mock_git_tools_instance.push_changes.return_value = (True, "Changes pushed")
 
-        # Create agent with mock LLM
-        llm = MockLLMProvider(responses={
-            "Please provide a concise, human-readable summary": "Successfully updated the hero section."
-        })
+        llm = FrankProvider()
         agent = WebsiteAgent(llm, website_dir="test_website")
 
-        # Execute an instruction
-        result = agent.execute_instruction("Test instruction")
+        result = agent._push_changes()
+        self.assertTrue(result["success"])
+        self.assertEqual(result["message"], "Changes pushed")
+
+        # Verify the mock was called
+        mock_git_tools_instance.push_changes.assert_called_once_with("test_website", "main")
+
+    @patch("src.agent.agent.WebsiteAgent._list_files")
+    @patch("src.agent.agent.WebsiteAgent._read_file")
+    @patch("src.agent.agent.WebsiteAgent._write_file")
+    @patch("src.agent.agent.WebsiteAgent._commit_changes")
+    def test_execute_instruction(self, mock_commit, mock_write, mock_read, mock_list):
+        """Test executing an instruction."""
+        # Set up mocks
+        mock_list.return_value = {"success": True, "files": ["index.html"]}
+        mock_read.return_value = {
+            "success": True,
+            "content": '<html><body><div class="hero-content"><h2>Title</h2><p>Old tagline</p></div></body></html>'
+        }
+        mock_write.return_value = {"success": True, "message": "File written: index.html"}
+        mock_commit.return_value = {"success": True, "message": "Changes committed"}
+
+        # Create a custom FrankProvider that returns predefined responses
+        class TestFrankProvider(FrankProvider):
+            def generate(self, prompt, **kwargs):
+                return "I've successfully updated the hero section with the new tagline and committed the changes."
+
+        llm = TestFrankProvider()
+        agent = WebsiteAgent(llm, website_dir="test_website")
+
+        result = agent.execute_instruction("Update the hero section with a new tagline")
 
         # Verify the result
-        self.assertEqual(result, "Successfully updated the hero section.")
-        mock_process_instruction.assert_called_once_with("Test instruction")
+        self.assertIn("successfully updated", result.lower())
 
 
 if __name__ == "__main__":

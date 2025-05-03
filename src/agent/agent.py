@@ -2,17 +2,17 @@ import os
 import json
 from typing import Dict, Any, List, Optional, Tuple
 
-from src.llm.provider import LLMProvider
+from src.llm.frank_provider import FrankProvider, ToolDefinition
 from src.agent.tools.file_tools import FileTools
 from src.agent.tools.git_tools import GitTools
 
 
 class WebsiteAgent:
     """
-    Agent that can modify code in the cynditaylor-com website.
+    Agent that can modify code in the cynditaylor-com website using an LLM with tools.
     """
 
-    def __init__(self, llm_provider: LLMProvider, website_dir: str = "cynditaylor-com"):
+    def __init__(self, llm_provider: FrankProvider, website_dir: str = "cynditaylor-com"):
         """
         Initialize the website agent.
 
@@ -29,149 +29,189 @@ class WebsiteAgent:
         if not os.path.isdir(website_dir):
             raise ValueError(f"Website directory '{website_dir}' does not exist")
 
-    def process_instruction(self, instruction: str) -> Dict[str, Any]:
+        # Register tools with the LLM provider
+        self._register_tools()
+
+    def _register_tools(self):
+        """Register tools with the LLM provider."""
+        # File tools
+        self.llm.register_tool(ToolDefinition(
+            name="list_files",
+            description="List files in a directory",
+            function=self._list_files
+        ))
+
+        self.llm.register_tool(ToolDefinition(
+            name="read_file",
+            description="Read the contents of a file",
+            function=self._read_file
+        ))
+
+        self.llm.register_tool(ToolDefinition(
+            name="write_file",
+            description="Write content to a file",
+            function=self._write_file
+        ))
+
+        # Git tools
+        self.llm.register_tool(ToolDefinition(
+            name="commit_changes",
+            description="Commit changes to the repository",
+            function=self._commit_changes
+        ))
+
+        self.llm.register_tool(ToolDefinition(
+            name="push_changes",
+            description="Push changes to the remote repository",
+            function=self._push_changes
+        ))
+
+    def _list_files(self, directory: str = ".", pattern: Optional[str] = None) -> Dict[str, Any]:
         """
-        Process an instruction to modify the website.
+        List files in a directory.
 
         Args:
-            instruction: The instruction to process
+            directory: Directory to list files from (relative to website_dir)
+            pattern: Optional glob pattern to filter files
 
         Returns:
-            A dictionary containing the result of processing the instruction
+            Dictionary with the list of files
         """
-        # Step 1: Analyze the instruction using the LLM
-        analysis_prompt = f"""
-        You are an agent that modifies code in the cynditaylor-com website.
-        Please analyze the following instruction and determine what changes need to be made:
-
-        INSTRUCTION:
-        {instruction}
-
-        Respond with a JSON object containing:
-        1. "files_to_modify": List of files that need to be modified
-        2. "actions": List of specific actions to take for each file
-        3. "reasoning": Your reasoning for these changes
-        """
-
-        analysis_response = self.llm.generate(analysis_prompt)
-
-        # In a real implementation, we would parse the JSON response
-        # For now, we'll use a placeholder
+        full_dir = os.path.join(self.website_dir, directory)
         try:
-            analysis = json.loads(analysis_response)
-        except json.JSONDecodeError:
-            # If the response is not valid JSON, create a placeholder analysis
-            analysis = {
-                "files_to_modify": [],
-                "actions": [],
-                "reasoning": "Could not parse LLM response as JSON"
+            files = self.file_tools.list_files(full_dir, pattern)
+            # Convert absolute paths to relative paths
+            relative_files = [os.path.relpath(f, self.website_dir) for f in files]
+            return {
+                "success": True,
+                "files": relative_files
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": str(e)
             }
 
-        # Step 2: Execute the changes
-        results = []
-        for i, file_path in enumerate(analysis.get("files_to_modify", [])):
-            full_path = os.path.join(self.website_dir, file_path)
+    def _read_file(self, file_path: str) -> Dict[str, Any]:
+        """
+        Read the contents of a file.
 
-            # Check if the file exists
+        Args:
+            file_path: Path to the file to read (relative to website_dir)
+
+        Returns:
+            Dictionary with the file content
+        """
+        full_path = os.path.join(self.website_dir, file_path)
+        try:
             if not self.file_tools.file_exists(full_path):
-                results.append({
-                    "file": file_path,
+                return {
                     "success": False,
                     "message": f"File does not exist: {file_path}"
-                })
-                continue
+                }
 
-            # Get the action for this file
-            action = analysis.get("actions", [])[i] if i < len(analysis.get("actions", [])) else None
-            if not action:
-                results.append({
-                    "file": file_path,
-                    "success": False,
-                    "message": f"No action specified for file: {file_path}"
-                })
-                continue
+            content = self.file_tools.read_file(full_path)
+            return {
+                "success": True,
+                "content": content
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": str(e)
+            }
 
-            # Read the current content
-            current_content = self.file_tools.read_file(full_path)
+    def _write_file(self, file_path: str, content: str) -> Dict[str, Any]:
+        """
+        Write content to a file.
 
-            # Generate the modified content using the LLM
-            modification_prompt = f"""
-            You are an agent that modifies code in the cynditaylor-com website.
-            You need to modify the following file according to this action:
+        Args:
+            file_path: Path to the file to write (relative to website_dir)
+            content: Content to write to the file
 
-            FILE: {file_path}
-            ACTION: {action}
-
-            Current content of the file:
-            ```
-            {current_content}
-            ```
-
-            Please provide the complete new content for the file.
-            Only output the new content, nothing else.
-            """
-
-            new_content = self.llm.generate(modification_prompt)
-
-            # Write the new content
-            success = self.file_tools.write_file(full_path, new_content)
-
-            results.append({
-                "file": file_path,
+        Returns:
+            Dictionary with the result of the operation
+        """
+        full_path = os.path.join(self.website_dir, file_path)
+        try:
+            success = self.file_tools.write_file(full_path, content)
+            return {
                 "success": success,
-                "message": f"File {'modified' if success else 'failed to modify'}: {file_path}"
-            })
+                "message": f"File {'written' if success else 'failed to write'}: {file_path}"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": str(e)
+            }
 
-        # Step 3: Commit the changes (in a real implementation, this might be optional)
-        if results and any(r["success"] for r in results):
-            commit_message = f"Update website based on instruction: {instruction[:50]}..."
-            commit_success, commit_message = self.git_tools.commit_changes(self.website_dir, commit_message)
+    def _commit_changes(self, message: str) -> Dict[str, Any]:
+        """
+        Commit changes to the repository.
 
-            if commit_success:
-                results.append({
-                    "action": "commit",
-                    "success": True,
-                    "message": commit_message
-                })
-            else:
-                results.append({
-                    "action": "commit",
-                    "success": False,
-                    "message": commit_message
-                })
+        Args:
+            message: Commit message
 
-        return {
-            "instruction": instruction,
-            "analysis": analysis,
-            "results": results,
-            "llm_provider": self.llm.get_name()
-        }
+        Returns:
+            Dictionary with the result of the operation
+        """
+        try:
+            success, result_message = self.git_tools.commit_changes(self.website_dir, message)
+            return {
+                "success": success,
+                "message": result_message
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": str(e)
+            }
+
+    def _push_changes(self, branch: str = "main") -> Dict[str, Any]:
+        """
+        Push changes to the remote repository.
+
+        Args:
+            branch: Branch to push to
+
+        Returns:
+            Dictionary with the result of the operation
+        """
+        try:
+            success, result_message = self.git_tools.push_changes(self.website_dir, branch)
+            return {
+                "success": success,
+                "message": result_message
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": str(e)
+            }
 
     def execute_instruction(self, instruction: str) -> str:
         """
-        Execute an instruction and return a human-readable summary.
+        Execute an instruction using the LLM with tools.
 
         Args:
             instruction: The instruction to execute
 
         Returns:
-            A human-readable summary of the execution
+            The final response from the LLM
         """
-        result = self.process_instruction(instruction)
-
-        # Generate a summary using the LLM
-        summary_prompt = f"""
+        # Create the initial prompt
+        prompt = f"""
         You are an agent that modifies code in the cynditaylor-com website.
-        You have executed an instruction and need to provide a summary of what was done.
+        You have access to tools that allow you to list files, read and write file contents, and commit changes to the repository.
 
         INSTRUCTION:
         {instruction}
 
-        EXECUTION RESULT:
-        {json.dumps(result, indent=2)}
-
-        Please provide a concise, human-readable summary of what was done.
+        Please analyze the instruction and use the available tools to make the necessary changes.
+        When you're done, provide a summary of what you did.
         """
 
-        summary = self.llm.generate(summary_prompt)
-        return summary
+        # Generate a response using the LLM with tools
+        response = self.llm.generate(prompt)
+
+        return response

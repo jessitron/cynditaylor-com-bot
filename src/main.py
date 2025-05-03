@@ -4,7 +4,6 @@ import logging
 from typing import Optional
 
 from src.config import Config
-from src.llm.provider import LLMProvider
 from src.llm.frank_provider import FrankProvider
 from src.agent.agent import WebsiteAgent
 
@@ -20,18 +19,19 @@ def setup_logging():
     )
 
 
-def get_llm_provider() -> LLMProvider:
+def get_llm_provider() -> FrankProvider:
     """
     Get the LLM provider based on configuration.
 
     Returns:
-        An instance of LLMProvider
+        An instance of FrankProviderWithTools
     """
     llm_config = Config.get_llm_config()
 
     if llm_config["provider"] == "frank":
         return FrankProvider(
-            model=llm_config["model"]
+            model=llm_config["model"],
+            max_iterations=10
         )
     else:
         raise ValueError(f"Unsupported LLM provider: {llm_config['provider']}")
