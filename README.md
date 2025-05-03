@@ -112,13 +112,13 @@ To add a new LLM provider:
 Run the agent with a default instruction:
 
 ```
-./run.py
+./run
 ```
 
 Or provide a custom instruction:
 
 ```
-./run.py "Update the contact information to include a new email address"
+./run "Update the contact information to include a new email address"
 ```
 
 Alternatively, you can run the module directly:
