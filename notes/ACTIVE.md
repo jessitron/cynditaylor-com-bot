@@ -4,15 +4,16 @@ In this file, we will formulate a plan together. Separately, you will implement 
 
 Our goal now is better abstract the LLM provider from the agent flow.
 
-[x] The LLM provider knows about tools in order to tell the LLM about them.
+Let me try to be very clear about this.
 
-[x] The LLM provider does not have the ability to execute tools.
+[] frank_provider never calls tools. Only agent.py can call tools.
 
-[x] The agent has the ability to execute tools.
+[] frank_provider does not loop. It makes 1 call to the LLM.
 
-[x] Each tool should have its own class. Each conforms to a Tool interface.
+also note: avoid adding `with tracer.start_as_current_span("span-name")` -- you're making too many spans.
 
-[x] Each tool execution creates an OpenTelemetry span.
+
+
 
 
 
