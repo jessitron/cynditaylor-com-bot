@@ -16,14 +16,6 @@ class ToolDefinition:
     """Definition of a tool that the LLM can use."""
 
     def __init__(self, name: str, description: str, function=None):
-        """
-        Initialize a tool definition.
-
-        Args:
-            name: Name of the tool
-            description: Description of what the tool does
-            function: Function to call when the tool is used (not used in the new design)
-        """
         self.name = name
         self.description = description
         self.function = function
@@ -53,9 +45,6 @@ class WebsiteAgent:
         if not os.path.isdir(website_dir):
             raise ValueError(f"Website directory '{website_dir}' does not exist")
 
-        # Register tools with the LLM provider
-        self._register_tools()
-
     def _initialize_tools(self):
         """Initialize tool instances."""
             # File tools
@@ -76,14 +65,7 @@ class WebsiteAgent:
             self.push_changes_tool
         ]:
             self.tools[tool.name] = tool
-
-    def _register_tools(self):
-        """
-        Create tool definitions.
-
-        Note: In the new design, we don't register tools with the LLM provider.
-        The agent is responsible for executing tools based on the LLM's response.
-        """
+       
         # Create tool definitions for documentation purposes
         self.tool_definitions = [
             ToolDefinition(
@@ -110,16 +92,6 @@ class WebsiteAgent:
 
     @tracer.start_as_current_span("Execute tool")
     def _execute_tool(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute a tool by name with the given arguments.
-
-        Args:
-            tool_name: Name of the tool to execute
-            args: Arguments for the tool
-
-        Returns:
-            Result of the tool execution
-        """
         if tool_name not in self.tools:
             return {
                 "success": False,
@@ -143,15 +115,6 @@ class WebsiteAgent:
 
     @tracer.start_as_current_span("Execute instruction")
     def execute_instruction(self, instruction: str) -> str:
-        """
-        Execute an instruction using the LLM with tools.
-
-        Args:
-            instruction: The instruction to execute
-
-        Returns:
-            The final response from the LLM
-        """
         span = trace.get_current_span()
         span.set_attribute("app.instruction", instruction)
 
@@ -175,9 +138,12 @@ class WebsiteAgent:
         conversation_history.append({"role": "user", "content": prompt})
 
         for i in range(max_iterations):
-            with tracer.start_as_current_span(f"Iteration {i+1}"):
+            with tracer.start_as_current_span(f"Iteration {i+1}") as span:
                 # Generate a response using the LLM
+                span.set_attribute("app.llm.prompt", prompt)
+                span.set_attribute("app.iteration", i + 1)
                 response = self.llm.generate(prompt)
+                span.set_attribute("app.llm.response", response)
 
                 # Add the response to the conversation history
                 conversation_history.append({"role": "assistant", "content": response})
@@ -187,26 +153,25 @@ class WebsiteAgent:
 
                 if tool_call:
                     # Execute the tool
-                    with tracer.start_as_current_span(f"Execute tool: {tool_call['name']}"):
-                        tool_name = tool_call["name"]
-                        tool_args = tool_call["arguments"]
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["arguments"]
 
-                        tool_result = self._execute_tool_by_name(tool_name, tool_args)
+                    tool_result = self._execute_tool_by_name(tool_name, tool_args)
 
-                        # Add the tool result to the conversation history
-                        conversation_history.append({
-                            "role": "tool",
-                            "name": tool_name,
-                            "content": tool_result
-                        })
+                    # Add the tool result to the conversation history
+                    conversation_history.append({
+                        "role": "tool",
+                        "name": tool_name,
+                        "content": tool_result
+                    })
 
-                        # Update the prompt with the tool result
-                        prompt = self._update_prompt_with_tool_result(
-                            prompt,
-                            tool_name,
-                            tool_args,
-                            tool_result
-                        )
+                    # Update the prompt with the tool result
+                    prompt = self._update_prompt_with_tool_result(
+                        prompt,
+                        tool_name,
+                        tool_args,
+                        tool_result
+                    )
                 else:
                     # No tool call, return the final response
                     return response
@@ -215,29 +180,9 @@ class WebsiteAgent:
         return response
 
     def _execute_tool_by_name(self, tool_name: str, tool_args: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute a tool by name with the given arguments.
-        This method is used as a callback for the LLM provider.
-
-        Args:
-            tool_name: Name of the tool to execute
-            tool_args: Arguments for the tool
-
-        Returns:
-            Result of the tool execution
-        """
         return self._execute_tool(tool_name, tool_args)
 
     def _extract_tool_call(self, response: str) -> Optional[Dict[str, Any]]:
-        """
-        Extract a tool call from the response.
-
-        Args:
-            response: The response to extract the tool call from
-
-        Returns:
-            A dictionary containing the tool name and arguments, or None if no tool call is found
-        """
         import re
         import json
 
@@ -255,18 +200,6 @@ class WebsiteAgent:
             return None
 
     def _update_prompt_with_tool_result(self, prompt: str, tool_name: str, tool_args: Dict[str, Any], tool_result: Dict[str, Any]) -> str:
-        """
-        Update the prompt with the tool result.
-
-        Args:
-            prompt: The current prompt
-            tool_name: Name of the tool that was executed
-            tool_args: Arguments that were passed to the tool
-            tool_result: Result of the tool execution
-
-        Returns:
-            Updated prompt with the tool result
-        """
         import json
 
         # Add the tool call and result to the prompt
