@@ -131,6 +131,13 @@ python -m src.main "Update the contact information to include a new email addres
 
 Run the tests:
 
+```sh
+./test
+```
+
+
+Alternatively, you can run the tests directly:
+
 ```
 python -m unittest discover tests
 ```
