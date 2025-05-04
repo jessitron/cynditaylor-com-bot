@@ -9,18 +9,9 @@ class ConversationLogger:
     def __init__(self, output_dir: str = "conversation_history"):
         self.output_dir = output_dir
         self.conversation_id = str(uuid.uuid4())
-        self.timestamp = datetime.datetime.now().isoformat()
+        self.timestamp = datetime.datetime.now()
         self.exchanges = []
-        self.previous_prompt = None
-
-        # Ensure the output directory exists
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Add .gitignore to the output directory if it doesn't exist
-        gitignore_path = os.path.join(output_dir, ".gitignore")
-        if not os.path.exists(gitignore_path):
-            with open(gitignore_path, "w") as f:
-                f.write("*\n")
+        self.previous_prompt = None # TODO: use a structured prompt so I don't have to retro this
 
     def find_new_portion(self, current_prompt: str, previous_prompt: Optional[str]) -> Optional[str]:
         if not previous_prompt:
@@ -89,19 +80,23 @@ class ConversationLogger:
         # Save the conversation after logging the tool call
         self.save()
 
+    def filename(self) -> str:
+        date_str = self.timestamp.strftime("%Y%m%d_%H%M%S")
+        return f"conversation_{date_str}_{self.conversation_id[:8]}.json"
+
     def save(self) -> str:
         # Create the conversation history object
         conversation_history = {
             "version": "1.0",
             "conversation_id": self.conversation_id,
-            "timestamp": self.timestamp,
+            "timestamp": self.timestamp.isoformat(),
             "exchanges": self.exchanges
         }
 
-        # Generate a filename based on the timestamp
-        date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"conversation_{date_str}_{self.conversation_id[:8]}.json"
-        file_path = os.path.join(self.output_dir, filename)
+        file_path = os.path.join(self.output_dir, self.filename())
+
+        # Ensure the output directory exists
+        os.makedirs(self.output_dir, exist_ok=True)
 
         # Write the conversation history to the file
         with open(file_path, "w") as f:

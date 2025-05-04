@@ -19,6 +19,8 @@ class FrankProvider(LLMProvider):
     def __init__(self, model: str = "default"):
         self.model = model
         self.conversation_logger = ConversationLogger(output_dir="conversation_history")
+        span = trace.get_current_span()
+        span.set_attribute("app.conversation-logger.filename", self.conversation_logger.filename())
 
         try:
             self.conversation_reader = ConversationReader(CONVERSATION_FILE)
