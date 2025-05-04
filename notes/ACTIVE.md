@@ -105,3 +105,4 @@ All additional corrections have been completed. The code now follows a more obje
 1. The ConversationLogger.log_exchange method now takes Prompt and Response objects directly
 2. The Agent no longer extracts tool calls from the response text, but instead uses the tool_calls field in the Response object
 3. The LoggingConversationPartner has been updated to pass Prompt and Response objects directly to the ConversationLogger
+4. Tests have been updated to work with the new Prompt and Response objects and are passing
