@@ -22,39 +22,18 @@ class LoggingConversationPartner(ConversationPartner):
         # Get the response from the wrapped conversation partner
         response = self.conversation_partner.get_response_for_prompt(prompt, **kwargs)
 
-        # Log the exchange
-        metadata = {
-            "model": self.get_name(),
-            "temperature": kwargs.get("temperature", 0.7),
-            "max_tokens": kwargs.get("max_tokens", 1000)
-        }
+        # Update metadata in the prompt if needed
+        if kwargs.get("temperature") or kwargs.get("max_tokens") or kwargs.get("model"):
+            # Only update if not already set
+            if not prompt.metadata.model:
+                prompt.metadata.model = self.get_name()
+            if kwargs.get("temperature"):
+                prompt.metadata.temperature = kwargs.get("temperature")
+            if kwargs.get("max_tokens"):
+                prompt.metadata.max_tokens = kwargs.get("max_tokens")
 
-        # Extract tool calls from the prompt and response
-        prompt_tool_calls = [
-            {
-                "tool_name": tool_call.tool_name,
-                "parameters": tool_call.parameters,
-                "result": tool_call.result
-            }
-            for tool_call in prompt.tool_calls
-        ]
-
-        response_tool_calls = [
-            {
-                "tool_name": tool_call.tool_name,
-                "parameters": tool_call.parameters,
-                "result": tool_call.result
-            }
-            for tool_call in response.tool_calls
-        ]
-
-        self.conversation_logger.log_exchange(
-            prompt.prompt_text,
-            response.response_text,
-            metadata,
-            prompt_tool_calls=prompt_tool_calls,
-            response_tool_calls=response_tool_calls
-        )
+        # Log the exchange with the prompt and response objects directly
+        self.conversation_logger.log_exchange(prompt, response)
 
         return response
 

@@ -1,7 +1,7 @@
 import os
 import json
 import re
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 
 from src.llm.frank_llm.frank_provider import FrankProvider
 from src.agent.tools.file_tools import ListFilesTool, ReadFileTool, WriteFileTool
@@ -148,13 +148,14 @@ class WebsiteAgent:
                     # Add the response to the conversation history
                     conversation_history.append({"role": "assistant", "content": response.response_text})
 
-                    # Check if the response contains a tool call
-                    tool_call = self._extract_tool_call(response.response_text)
+                    # Check if the response contains tool calls
+                    if response.tool_calls:
+                        # Get the first tool call
+                        tool_call = response.tool_calls[0]
 
-                    if tool_call:
-                        # Execute the tool
-                        tool_name = tool_call["name"]
-                        tool_args = tool_call["arguments"]
+                        # Extract tool name and parameters
+                        tool_name = tool_call.tool_name
+                        tool_args = tool_call.parameters
 
                         tool_result = self._execute_tool_by_name(tool_name, tool_args)
 
@@ -198,22 +199,7 @@ class WebsiteAgent:
     def _execute_tool_by_name(self, tool_name: str, tool_args: Dict[str, Any]) -> Dict[str, Any]:
         return self._execute_tool(tool_name, tool_args)
 
-    def _extract_tool_call(self, response: str) -> Optional[Dict[str, Any]]:
-        import re
-        import json
-
-        tool_match = re.search(r'```tool\s*(.*?)```', response, re.DOTALL)
-        if not tool_match:
-            return None
-
-        try:
-            tool_json = json.loads(tool_match.group(1))
-            return {
-                "name": tool_json.get("name", ""),
-                "arguments": tool_json.get("arguments", {})
-            }
-        except json.JSONDecodeError:
-            return None
+    # The _extract_tool_call method has been removed as tool calls now come directly in the Response object
 
     def _update_prompt_with_tool_result(self, prompt: str, tool_name: str, tool_args: Dict[str, Any], tool_result: Dict[str, Any]) -> str:
         import json

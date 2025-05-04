@@ -96,5 +96,12 @@ All corrections have been completed. The code now uses proper dataclass objects 
 
 ## Corrections
 
-[] The log_exchange method in ConversationLogger should take 2 objects, not a whole slew of primitives.
-[] The Agent should never extract tool calls. Tool calls come in the Response object from the ConversationPartner.
+✅ Completed additional corrections:
+
+[x] The log_exchange method in ConversationLogger should take 2 objects, not a whole slew of primitives.
+[x] The Agent should never extract tool calls. Tool calls come in the Response object from the ConversationPartner.
+
+All additional corrections have been completed. The code now follows a more object-oriented approach:
+1. The ConversationLogger.log_exchange method now takes Prompt and Response objects directly
+2. The Agent no longer extracts tool calls from the response text, but instead uses the tool_calls field in the Response object
+3. The LoggingConversationPartner has been updated to pass Prompt and Response objects directly to the ConversationLogger
