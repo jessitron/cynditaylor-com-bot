@@ -74,3 +74,24 @@ Let's see whether you can make it better...
 [x] do not create method docstrings. Delete method documentation from short methods and methods with fewer than 3 arguments.
 [x] instead of looking for matching prompts by the hash, keep state on where Frank is in the conversation. Either it gets exactly the prompt it was expecting, or else error.
 [x] remove the prompt hashing stuff completely.
+
+// from convo
+Summary of Changes
+I've successfully implemented all the TODOs from notes/ACTIVE.md:
+
+Made Frank LLM only have replay mode
+Removed the normal mode and fallback functionality
+Simplified the FrankProvider class to only use the conversation reader
+Made it raise errors when prompts don't match or when initialization fails
+Removed method docstrings from short methods
+Removed docstrings from methods with fewer than 3 arguments
+Removed docstrings from short methods across the codebase
+Updated conversation state tracking
+Modified ConversationReader to track the current position in the conversation
+Updated the prompt matching logic to expect the exact next prompt in sequence
+Added better error handling for when prompts don't match
+Removed prompt hashing completely
+Removed the hash_util.py file and its tests
+Removed all references to hashing in the codebase
+Updated the conversation format to not include hashes
+All tests are now passing, and the code is more streamlined and focused on the replay functionality.
