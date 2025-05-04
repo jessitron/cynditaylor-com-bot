@@ -70,7 +70,7 @@ Now let's have some fun.
 
 Let's see whether you can make it better...
 
-[] Frank has ONLY replay mode, there is no other mode. All it does is replay one conversation, based on the default instruction.
-[] do not create method docstrings. Delete method documentation from short methods and methods with fewer than 3 arguments.
-[] instead of looking for matching prompts by the hash, keep state on where Frank is in the conversation. Either it gets exactly the prompt it was expecting, or else error.
-[] remove the prompt hashing stuff completely.
+[x] Frank has ONLY replay mode, there is no other mode. All it does is replay one conversation, based on the default instruction.
+[x] do not create method docstrings. Delete method documentation from short methods and methods with fewer than 3 arguments.
+[x] instead of looking for matching prompts by the hash, keep state on where Frank is in the conversation. Either it gets exactly the prompt it was expecting, or else error.
+[x] remove the prompt hashing stuff completely.
