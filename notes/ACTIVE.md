@@ -1,4 +1,4 @@
-# Active work for Augment Agent right now
+# Augment implemented Conversation Logger and Conversation Reader
 
 In this file, we will formulate a plan together. Separately, you will implement it.
 
@@ -95,3 +95,7 @@ Removed the hash_util.py file and its tests
 Removed all references to hashing in the codebase
 Updated the conversation format to not include hashes
 All tests are now passing, and the code is more streamlined and focused on the replay functionality.
+
+## Denoument
+
+The program didn't run. It made a mess when asked to fix it. But it was something I could work with.

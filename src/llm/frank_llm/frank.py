@@ -5,7 +5,6 @@ from opentelemetry import trace
 
 from src.llm.conversation_partner import ConversationPartner
 
-from ..provider import LLMProvider
 from src.conversation.logger import ConversationLogger
 from ..conversation_reader import ConversationReader
 
@@ -18,8 +17,7 @@ CONVERSATION_FILE = os.path.join(os.path.dirname(__file__), "conversations", "te
 class Frank(ConversationPartner):
 
     @tracer.start_as_current_span("Initialize Frank")
-    def __init__(self, model: str = "default"):
-        self.model = model
+    def __init__(self):
         self.conversation_logger = ConversationLogger(output_dir="conversation_history")
         span = trace.get_current_span()
         span.set_attribute("app.conversation-logger.filename", self.conversation_logger.filename())
@@ -38,7 +36,7 @@ class Frank(ConversationPartner):
                 logger.info("Found matching prompt in conversation history")
                 # Log the exchange
                 metadata = {
-                    "model": self.model,
+                    "model": "Frank",
                     "temperature": kwargs.get("temperature", 0.7),
                     "max_tokens": kwargs.get("max_tokens", 1000)
                 }
@@ -52,4 +50,4 @@ class Frank(ConversationPartner):
             raise
 
     def get_name(self) -> str:
-        return f"Frank ({self.model})"
+        return f"Frank"
