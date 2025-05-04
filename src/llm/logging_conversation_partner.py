@@ -39,6 +39,4 @@ class LoggingConversationPartner(ConversationPartner):
         # Save the final conversation state
         self.conversation_logger.save()
         
-        # Call finish_conversation on the wrapped partner if it implements it
-        if hasattr(self.conversation_partner, 'finish_conversation'):
-            self.conversation_partner.finish_conversation()
+        self.conversation_partner.finish_conversation()

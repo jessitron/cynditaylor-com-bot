@@ -12,8 +12,4 @@ from ..provider import LLMProvider
 class FrankProvider(LLMProvider):
 
     def start_conversation(self) -> ConversationPartner:
-        # Create a Frank instance
-        frank = Frank()
-
-        # Wrap it with a LoggingConversationPartner
-        return LoggingConversationPartner(frank)
+        return LoggingConversationPartner(Frank())
