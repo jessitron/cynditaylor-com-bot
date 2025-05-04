@@ -66,24 +66,8 @@ Now let's have some fun.
 
 [x] make a script that reads the conversation history and prints it to the terminal like in cowsay,
 
-- with an ascii art cow on the left playing the role of our agent saying the prompt,
-- and an ascii art dragon playing the role of Frank the LLM on the right.
-- When the cow says the prompt, it says only the new portion
-
-The script has been implemented in `src/conversation/visualize.py` and can be run using the `./visualize-conversation` wrapper script. It reads a conversation history file in the JSON format we defined and displays each exchange with:
-
-1. A cow (agent) on the left showing the prompt (only the new portion if available)
-2. A dragon (Frank LLM) on the right showing the response
-3. Tool calls and their results displayed below each exchange
-
-Usage:
-```
-./visualize-conversation [file]
-```
-
-If no file is provided, it will use the most recent conversation history file in the `conversation_history` directory.
-
-DO NOT DO THIS YET:
-
 [] implement Frank LLM to read conversation history and replay responses
 
+- move the test conversation into Frank's source code directory, and read it from there.
+- hard-code the name of the conversation file.
+- when done, try running the program and make sure it works.
