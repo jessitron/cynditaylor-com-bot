@@ -4,6 +4,7 @@ import logging
 
 from opentelemetry import trace
 
+from src.llm.conversation_reader import ConversationReader
 from src.llm.frank_llm.frank import Frank
 from src.llm.logging_conversation_partner import LoggingConversationPartner
 from src.llm.conversation_partner import ConversationPartner
@@ -26,10 +27,9 @@ class FrankProvider(LLMProvider):
         span = trace.get_current_span()
         span.set_attribute("app.conversation-reader.filename", CONVERSATION_FILE)
         try:
-            with open(CONVERSATION_FILE, "r") as f:
-                conversation = json.load(f)["exchanges"]
+            conversation = ConversationReader(CONVERSATION_FILE).load_conversation()
         except (json.JSONDecodeError, FileNotFoundError) as e:
             logger.error(f"Error loading conversation file: {e}")
             raise
 
-        return LoggingConversationPartner(Frank(conversation))
+        return LoggingConversationPartner(Frank(conversation["exchanges"]))
