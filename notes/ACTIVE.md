@@ -16,3 +16,5 @@ It always returns the next response in the list.
 [x] Change the test to provide a proper list of Exchanges
 
 All tasks have been completed and tests are passing. The code now has proper type definitions for Exchange and Conversation objects, making it more maintainable and type-safe.
+
+... now there's a different error when running it; I need to rethink the exchange ID somehow
