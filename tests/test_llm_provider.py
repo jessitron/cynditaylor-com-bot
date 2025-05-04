@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import MagicMock
 
 from src.llm.frank_provider import FrankProvider
 
@@ -7,17 +8,19 @@ class TestFrankProvider(unittest.TestCase):
 
     def test_init(self):
         """Test initialization of FrankProvider."""
-        provider = FrankProvider(model="custom_model")
+        provider = FrankProvider(model="custom_model", replay_mode=False)
         self.assertEqual(provider.model, "custom_model")
+        self.assertFalse(provider.replay_mode)
 
     def test_init_default_model(self):
         """Test initialization with default model."""
-        provider = FrankProvider()
+        provider = FrankProvider(replay_mode=False)
         self.assertEqual(provider.model, "default")
+        self.assertFalse(provider.replay_mode)
 
-    def test_generate(self):
-        """Test generate method."""
-        provider = FrankProvider()
+    def test_generate_normal_mode(self):
+        """Test generate method in normal mode."""
+        provider = FrankProvider(replay_mode=False)
 
         # Test the generate method
         prompt = """
@@ -31,6 +34,47 @@ class TestFrankProvider(unittest.TestCase):
         self.assertIsInstance(response, str)
         # Verify the response contains a tool call suggestion
         self.assertIn("list_files", response)
+
+    def test_generate_replay_mode(self):
+        """Test generate method in replay mode."""
+        # Create a provider with a mock conversation reader
+        provider = FrankProvider(replay_mode=True)
+
+        # Replace the conversation reader with a mock
+        mock_reader = MagicMock()
+        mock_reader.get_response_for_prompt.return_value = "Replayed response from conversation history"
+        provider.conversation_reader = mock_reader
+
+        # Test the generate method
+        prompt = "Test prompt"
+        response = provider.generate(prompt)
+
+        # Verify the response is the one from the conversation history
+        self.assertEqual(response, "Replayed response from conversation history")
+        mock_reader.get_response_for_prompt.assert_called_once_with(prompt)
+
+    def test_generate_replay_mode_no_match(self):
+        """Test generate method in replay mode when no matching prompt is found."""
+        # Create a provider with a mock conversation reader
+        provider = FrankProvider(replay_mode=True)
+
+        # Replace the conversation reader with a mock
+        mock_reader = MagicMock()
+        mock_reader.get_response_for_prompt.return_value = None
+        provider.conversation_reader = mock_reader
+
+        # Test the generate method
+        prompt = "Test prompt"
+
+        # When no matching prompt is found, the provider should fall back to normal mode
+        response = provider.generate(prompt)
+
+        # Verify that replay mode was disabled
+        self.assertFalse(provider.replay_mode)
+
+        # Verify that a response was generated using the normal mode
+        self.assertIsNotNone(response)
+        self.assertIn("I'll help you with that", response)
 
     def test_extract_instruction(self):
         """Test _extract_instruction method."""

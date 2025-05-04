@@ -66,8 +66,17 @@ Now let's have some fun.
 
 [x] make a script that reads the conversation history and prints it to the terminal like in cowsay,
 
-[] implement Frank LLM to read conversation history and replay responses
+[x] implement Frank LLM to read conversation history and replay responses
 
-- move the test conversation into Frank's source code directory, and read it from there.
-- hard-code the name of the conversation file.
-- when done, try running the program and make sure it works.
+- moved the test conversation into Frank's source code directory at `src/llm/conversations/test_conversation.json`
+- hard-coded the name of the conversation file in `src/llm/frank_provider.py`
+- implemented `ConversationReader` class to read and match prompts from conversation history
+- modified `FrankProvider` to use the conversation reader in replay mode
+- added tests for the new functionality
+
+The implementation:
+1. Reads conversation history from a JSON file
+2. Matches incoming prompts against the recorded prompts using hash verification
+3. Returns the corresponding response if a match is found
+4. Falls back to normal mode if no match is found or an error occurs
+5. Logs all exchanges, even in replay mode
