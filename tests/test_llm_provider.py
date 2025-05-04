@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.llm.frank_provider import FrankProvider
+from src.llm.frank_llm.frank_provider import FrankProvider
 
 
 class TestFrankProvider(unittest.TestCase):

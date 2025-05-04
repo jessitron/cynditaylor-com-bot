@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 
 from src.config import Config
-from src.llm.frank_provider import FrankProvider
+from src.llm.frank_llm.frank_provider import FrankProvider
 from src.agent.agent import WebsiteAgent
 
 def setup_logging():
@@ -25,12 +25,10 @@ def get_llm_provider() -> FrankProvider:
     Returns:
         An instance of FrankProvider
     """
-    llm_config = Config.get_llm_config()
+    llm_config = Config.get_llm_config() # TODO: remove all config. We can hard-code everything
 
     if llm_config["provider"] == "frank":
-        return FrankProvider(
-            model=llm_config["model"]
-        )
+        return FrankProvider()
     else:
         raise ValueError(f"Unsupported LLM provider: {llm_config['provider']}")
 
@@ -54,7 +52,6 @@ def main(instruction: Optional[str] = None):
     try:
         # Get the LLM provider
         llm_provider = get_llm_provider()
-        logger.info(f"Using LLM provider: {llm_provider.get_name()}")
 
         # Create the website agent
         website_config = Config.get_website_config()

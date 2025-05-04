@@ -3,19 +3,21 @@ import logging
 
 from opentelemetry import trace
 
-from .provider import LLMProvider
-from src.conversation.logger import ConversationLogger
-from .conversation_reader import ConversationReader
+from src.llm.conversation_partner import ConversationPartner
 
-tracer = trace.get_tracer("cynditaylor-com-bot")
+from ..provider import LLMProvider
+from src.conversation.logger import ConversationLogger
+from ..conversation_reader import ConversationReader
+
+tracer = trace.get_tracer("frank-the-fake-llm")
 logger = logging.getLogger(__name__)
 
 # Hard-coded conversation file path
 CONVERSATION_FILE = os.path.join(os.path.dirname(__file__), "conversations", "test_conversation.json")
 
+class Frank(ConversationPartner):
 
-class FrankProvider(LLMProvider):
-
+    @tracer.start_as_current_span("Initialize Frank")
     def __init__(self, model: str = "default"):
         self.model = model
         self.conversation_logger = ConversationLogger(output_dir="conversation_history")
@@ -23,13 +25,13 @@ class FrankProvider(LLMProvider):
         span.set_attribute("app.conversation-logger.filename", self.conversation_logger.filename())
 
         try:
+            span.set_attribute("app.conversation-reader.filename", CONVERSATION_FILE)
             self.conversation_reader = ConversationReader(CONVERSATION_FILE)
-            logger.info(f"Frank initialized using conversation file: {CONVERSATION_FILE}")
         except Exception as e:
             logger.error(f"Error initializing conversation reader: {e}")
             raise ValueError(f"Failed to initialize Frank: {e}")
 
-    def generate(self, prompt: str, **kwargs) -> str:
+    def get_response_for_prompt(self, prompt: str, **kwargs) -> str:
         try:
             response = self.conversation_reader.get_response_for_prompt(prompt)
             if response:

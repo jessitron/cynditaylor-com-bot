@@ -3,11 +3,13 @@ import json
 import re
 from typing import Dict, Any, Optional, List
 
-from src.llm.frank_provider import FrankProvider
+from src.llm.frank_llm.frank_provider import FrankProvider
 from src.agent.tools.file_tools import ListFilesTool, ReadFileTool, WriteFileTool
 from src.agent.tools.git_tools import CommitChangesTool, PushChangesTool
 
 from opentelemetry import trace
+
+from src.llm.provider import LLMProvider
 
 tracer = trace.get_tracer("cynditaylor-com-bot")
 
@@ -26,8 +28,8 @@ class WebsiteAgent:
     """
 
     @tracer.start_as_current_span("Initialize agent")
-    def __init__(self, llm_provider: FrankProvider, website_dir: str = "cynditaylor-com"):
-        self.llm = llm_provider
+    def __init__(self, llm_provider: LLMProvider, website_dir: str = "cynditaylor-com"):
+        self.llm_provider = llm_provider
         self.website_dir = website_dir
 
         # Initialize tools
@@ -88,6 +90,7 @@ class WebsiteAgent:
     def execute_instruction(self, instruction: str) -> str:
         span = trace.get_current_span()
         span.set_attribute("app.instruction", instruction)
+        llm = self.llm_provider.start_conversation()
 
         # Create the initial prompt
         prompt = f"""
@@ -114,15 +117,15 @@ class WebsiteAgent:
                 # Generate a response using the LLM
                 span.set_attribute("app.llm.prompt", prompt)
                 span.set_attribute("app.iteration", i + 1)
-                response = self.llm.generate(prompt)
+                response = llm.get_response_for_prompt(prompt)
                 span.set_attribute("app.llm.response", response)
 
                 # Add the response to the conversation history
                 conversation_history.append({"role": "assistant", "content": response})
 
                 # Get the current exchange ID from the conversation logger
-                if hasattr(self.llm, 'conversation_logger'):
-                    current_exchange_id = f"exchange-{len(self.llm.conversation_logger.exchanges)}"
+                if hasattr(llm, 'conversation_logger'):
+                    current_exchange_id = f"exchange-{len(llm.conversation_logger.exchanges)}"
 
                 # Check if the response contains a tool call
                 tool_call = self._extract_tool_call(response)
@@ -142,8 +145,8 @@ class WebsiteAgent:
                     })
 
                     # Log the tool call in the conversation logger
-                    if hasattr(self.llm, 'conversation_logger') and current_exchange_id:
-                        self.llm.conversation_logger.log_tool_call(
+                    if hasattr(llm, 'conversation_logger') and current_exchange_id:
+                        llm.conversation_logger.log_tool_call(
                             current_exchange_id,
                             tool_name,
                             tool_args,

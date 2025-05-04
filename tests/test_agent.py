@@ -2,7 +2,7 @@ import unittest
 import os
 from unittest.mock import MagicMock
 
-from src.llm.frank_provider import FrankProvider
+from src.llm.frank_llm.frank_provider import FrankProvider
 from src.agent.agent import WebsiteAgent
 
 
