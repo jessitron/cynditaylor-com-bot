@@ -68,15 +68,9 @@ Now let's have some fun.
 
 [x] implement Frank LLM to read conversation history and replay responses
 
-- moved the test conversation into Frank's source code directory at `src/llm/conversations/test_conversation.json`
-- hard-coded the name of the conversation file in `src/llm/frank_provider.py`
-- implemented `ConversationReader` class to read and match prompts from conversation history
-- modified `FrankProvider` to use the conversation reader in replay mode
-- added tests for the new functionality
+Let's see whether you can make it better...
 
-The implementation:
-1. Reads conversation history from a JSON file
-2. Matches incoming prompts against the recorded prompts using hash verification
-3. Returns the corresponding response if a match is found
-4. Falls back to normal mode if no match is found or an error occurs
-5. Logs all exchanges, even in replay mode
+[] Frank has ONLY replay mode, there is no other mode. All it does is replay one conversation, based on the default instruction.
+[] do not create method docstrings. Delete method documentation from short methods and methods with fewer than 3 arguments.
+[] instead of looking for matching prompts by the hash, keep state on where Frank is in the conversation. Either it gets exactly the prompt it was expecting, or else error.
+[] remove the prompt hashing stuff completely.
