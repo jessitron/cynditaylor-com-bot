@@ -106,3 +106,4 @@ All additional corrections have been completed. The code now follows a more obje
 2. The Agent no longer extracts tool calls from the response text, but instead uses the tool_calls field in the Response object
 3. The LoggingConversationPartner has been updated to pass Prompt and Response objects directly to the ConversationLogger
 4. Tests have been updated to work with the new Prompt and Response objects and are passing
+5. The test_conversation.json file has been updated to use the new field names (prompt_text, response_text, new_text) and structure
