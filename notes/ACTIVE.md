@@ -17,4 +17,62 @@ It always returns the next response in the list.
 
 All tasks have been completed and tests are passing. The code now has proper type definitions for Exchange and Conversation objects, making it more maintainable and type-safe.
 
-... now there's a different error when running it; I need to rethink the exchange ID somehow
+## Next
+
+I want to change how tool call results are recorded.
+
+In a Conversation, the first exchange should have this structure:
+
+```json
+{
+    "id": "exchange-1",
+    "prompt": {
+        "text": "The exact prompt text sent to the LLM",
+        "metadata": {
+            ... whatever...
+        }
+    },
+    "response": {
+        "text": "The full response from the LLM to replay",
+        "tool_calls": [
+            {
+                "tool_name": "example_tool",
+                "parameters": {"param1": "value1"},
+                // never a result here
+            }
+        ]
+    }
+}
+```
+
+Then subsequent exchanges, after tool calls, should have this structure:
+
+```json 
+{
+    "id": "exchange-2",
+    "prompt": {
+        "tool_calls": [
+            {
+                "tool_name": "example_tool",
+                "parameters": {"param1": "value1"},
+                "result": "Tool execution result"
+            }
+        ],
+        "new_portion": "only the text that was not in the previous prompt",
+        "text": "the whole prompt to send this time",
+        "metadata": {
+            ... whatever...
+        }
+    },
+    "response": {
+        "text": "Follow-up response from the LLM... maybe it doesn't have tool calls this time"
+    }
+}
+```
+
+[] change the structure of the Conversation types
+[] make the agent send a prompt in this structure
+[] make the test conversation follow this structure
+[] make Frank return a response object including tool calls, as in the replay
+[] the Agent no longer tries to log tool call results; instead it includes them in the Prompt structure
+[] that way the ConversationLogger can just log the tool call results with the prompt, instead of trying to cram them into the previous exchange.
