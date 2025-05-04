@@ -92,80 +92,84 @@ class WebsiteAgent:
         span.set_attribute("app.instruction", instruction)
         llm = self.llm_provider.start_conversation()
 
-        # Create the initial prompt
-        prompt = f"""
-        You are an agent that modifies code in the cynditaylor-com website.
-        You have access to tools that allow you to list files, read and write file contents, and commit changes to the repository.
+        try:
+            # Create the initial prompt
+            prompt = f"""
+            You are an agent that modifies code in the cynditaylor-com website.
+            You have access to tools that allow you to list files, read and write file contents, and commit changes to the repository.
 
-        INSTRUCTION:
-        {instruction}
+            INSTRUCTION:
+            {instruction}
 
-        Please analyze the instruction and use the available tools to make the necessary changes.
-        When you're done, provide a summary of what you did.
-        """
+            Please analyze the instruction and use the available tools to make the necessary changes.
+            When you're done, provide a summary of what you did.
+            """
 
-        # Start the conversation loop
-        max_iterations = 10
-        conversation_history = []
-        current_exchange_id = None
+            # Start the conversation loop
+            max_iterations = 10
+            conversation_history = []
+            current_exchange_id = None
 
-        # Add the initial prompt to the conversation history
-        conversation_history.append({"role": "user", "content": prompt})
+            # Add the initial prompt to the conversation history
+            conversation_history.append({"role": "user", "content": prompt})
 
-        for i in range(max_iterations):
-            with tracer.start_as_current_span(f"Iteration {i+1}") as span:
-                # Generate a response using the LLM
-                span.set_attribute("app.llm.prompt", prompt)
-                span.set_attribute("app.iteration", i + 1)
-                response = llm.get_response_for_prompt(prompt)
-                span.set_attribute("app.llm.response", response)
+            for i in range(max_iterations):
+                with tracer.start_as_current_span(f"Iteration {i+1}") as span:
+                    # Generate a response using the LLM
+                    span.set_attribute("app.llm.prompt", prompt)
+                    span.set_attribute("app.iteration", i + 1)
+                    response = llm.get_response_for_prompt(prompt)
+                    span.set_attribute("app.llm.response", response)
 
-                # Add the response to the conversation history
-                conversation_history.append({"role": "assistant", "content": response})
+                    # Add the response to the conversation history
+                    conversation_history.append({"role": "assistant", "content": response})
 
-                # Get the current exchange ID from the conversation logger
-                if hasattr(llm, 'conversation_logger'):
-                    current_exchange_id = f"exchange-{len(llm.conversation_logger.exchanges)}"
+                    # Get the current exchange ID from the conversation logger
+                    if hasattr(llm, 'conversation_logger'):
+                        current_exchange_id = f"exchange-{len(llm.conversation_logger.exchanges)}"
 
-                # Check if the response contains a tool call
-                tool_call = self._extract_tool_call(response)
+                    # Check if the response contains a tool call
+                    tool_call = self._extract_tool_call(response)
 
-                if tool_call:
-                    # Execute the tool
-                    tool_name = tool_call["name"]
-                    tool_args = tool_call["arguments"]
+                    if tool_call:
+                        # Execute the tool
+                        tool_name = tool_call["name"]
+                        tool_args = tool_call["arguments"]
 
-                    tool_result = self._execute_tool_by_name(tool_name, tool_args)
+                        tool_result = self._execute_tool_by_name(tool_name, tool_args)
 
-                    # Add the tool result to the conversation history
-                    conversation_history.append({
-                        "role": "tool",
-                        "name": tool_name,
-                        "content": tool_result
-                    })
+                        # Add the tool result to the conversation history
+                        conversation_history.append({
+                            "role": "tool",
+                            "name": tool_name,
+                            "content": tool_result
+                        })
 
-                    # Log the tool call in the conversation logger
-                    if hasattr(llm, 'conversation_logger') and current_exchange_id:
-                        llm.conversation_logger.log_tool_call(
-                            current_exchange_id,
+                        # Log the tool call in the conversation logger
+                        if hasattr(llm, 'conversation_logger') and current_exchange_id:
+                            llm.conversation_logger.log_tool_call(
+                                current_exchange_id,
+                                tool_name,
+                                tool_args,
+                                tool_result
+                            )
+
+                        # Update the prompt with the tool result
+                        prompt = self._update_prompt_with_tool_result(
+                            prompt,
                             tool_name,
                             tool_args,
                             tool_result
                         )
+                    else:
+                        # No tool call, return the final response
+                        return response
 
-                    # Update the prompt with the tool result
-                    prompt = self._update_prompt_with_tool_result(
-                        prompt,
-                        tool_name,
-                        tool_args,
-                        tool_result
-                    )
-                else:
-                    # No tool call, return the final response
-                    return response
-
-        # If we reach the maximum number of iterations, return the last response
-        return response
+            # If we reach the maximum number of iterations, return the last response
+            return response
+        finally:
+            # Always call finish_conversation to ensure proper cleanup
+            llm.finish_conversation()
 
     def _execute_tool_by_name(self, tool_name: str, tool_args: Dict[str, Any]) -> Dict[str, Any]:
         return self._execute_tool(tool_name, tool_args)

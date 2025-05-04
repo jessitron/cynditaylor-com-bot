@@ -4,8 +4,6 @@ import logging
 from opentelemetry import trace
 
 from src.llm.conversation_partner import ConversationPartner
-
-from src.conversation.logger import ConversationLogger
 from ..conversation_reader import ConversationReader
 
 tracer = trace.get_tracer("frank-the-fake-llm")
@@ -18,10 +16,7 @@ class Frank(ConversationPartner):
 
     @tracer.start_as_current_span("Initialize Frank")
     def __init__(self):
-        self.conversation_logger = ConversationLogger(output_dir="conversation_history")
         span = trace.get_current_span()
-        span.set_attribute("app.conversation-logger.filename", self.conversation_logger.filename())
-
         try:
             span.set_attribute("app.conversation-reader.filename", CONVERSATION_FILE)
             self.conversation_reader = ConversationReader(CONVERSATION_FILE)
@@ -34,13 +29,6 @@ class Frank(ConversationPartner):
             response = self.conversation_reader.get_response_for_prompt(prompt)
             if response:
                 logger.info("Found matching prompt in conversation history")
-                # Log the exchange
-                metadata = {
-                    "model": "Frank",
-                    "temperature": kwargs.get("temperature", 0.7),
-                    "max_tokens": kwargs.get("max_tokens", 1000)
-                }
-                self.conversation_logger.log_exchange(prompt, response, metadata)
                 return response
             else:
                 logger.error("No matching prompt found in conversation history")

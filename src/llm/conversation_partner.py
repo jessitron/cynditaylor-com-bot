@@ -15,3 +15,10 @@ class ConversationPartner(ABC):
     def get_name(self) -> str:
         pass
 
+    def finish_conversation(self) -> None:
+        """
+        Called at the end of a conversation to perform any cleanup or finalization.
+        This is an optional method with a default no-op implementation.
+        """
+        pass
+
