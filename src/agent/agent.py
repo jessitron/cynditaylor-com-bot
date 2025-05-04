@@ -27,13 +27,6 @@ class WebsiteAgent:
 
     @tracer.start_as_current_span("Initialize agent")
     def __init__(self, llm_provider: FrankProvider, website_dir: str = "cynditaylor-com"):
-        """
-        Initialize the website agent.
-
-        Args:
-            llm_provider: The LLM provider to use for generating responses
-            website_dir: Directory containing the website code
-        """
         self.llm = llm_provider
         self.website_dir = website_dir
 
@@ -66,29 +59,7 @@ class WebsiteAgent:
         ]:
             self.tools[tool.name] = tool
 
-        # Create tool definitions for documentation purposes
-        self.tool_definitions = [
-            ToolDefinition(
-                name="list_files",
-                description="List files in a directory"
-            ),
-            ToolDefinition(
-                name="read_file",
-                description="Read the contents of a file"
-            ),
-            ToolDefinition(
-                name="write_file",
-                description="Write content to a file"
-            ),
-            ToolDefinition(
-                name="commit_changes",
-                description="Commit changes to the repository"
-            ),
-            ToolDefinition(
-                name="push_changes",
-                description="Push changes to the remote repository"
-            )
-        ]
+        # Do not create unused tool definitions for documentation purposes again, please
 
     @tracer.start_as_current_span("Execute tool")
     def _execute_tool(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
