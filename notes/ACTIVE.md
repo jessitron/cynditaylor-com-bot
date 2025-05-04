@@ -107,3 +107,4 @@ All additional corrections have been completed. The code now follows a more obje
 3. The LoggingConversationPartner has been updated to pass Prompt and Response objects directly to the ConversationLogger
 4. Tests have been updated to work with the new Prompt and Response objects and are passing
 5. The test_conversation.json file has been updated to use the new field names (prompt_text, response_text, new_text) and structure
+6. Added a final exchange with no tool calls to the test_conversation.json file to properly end the conversation
