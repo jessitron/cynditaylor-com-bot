@@ -1,2 +1,3 @@
 - Do not make comments for obvious stuff.
 - If a method exists and does not have a documentation comment, do not add one.
+- do not implement fallbacks. On failure, raise a clear error.
