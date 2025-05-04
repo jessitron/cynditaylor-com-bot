@@ -43,28 +43,7 @@ class FrankProvider(LLMProvider):
             else:
                 logger.error("No matching prompt found in conversation history")
                 raise ValueError(f"No matching prompt found in conversation history. Prompt: {prompt[:100]}...")
-        except ValueError as e:
-            if "End of conversation reached" in str(e):
-                # If we've reached the end of the conversation, return a completion message
-                logger.warning("End of conversation reached, returning completion message")
-                completion_message = "I've completed the task of updating the hero section with the new tagline. The changes have been successfully applied to the website."
-
-                # Log this final exchange
-                metadata = {
-                    "model": self.model,
-                    "temperature": kwargs.get("temperature", 0.7),
-                    "max_tokens": kwargs.get("max_tokens", 1000),
-                    "auto_completion": True
-                }
-                self.conversation_logger.log_exchange(prompt, completion_message, metadata)
-
-                return completion_message
-            else:
-                # For other ValueError exceptions, re-raise
-                logger.error(f"Error in Frank: {e}")
-                raise
         except Exception as e:
-            # For all other exceptions, log and re-raise
             logger.error(f"Error in Frank: {e}")
             raise
 

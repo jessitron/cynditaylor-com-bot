@@ -75,49 +75,14 @@ class TestConversationReader(unittest.TestCase):
         self.assertEqual(self.reader.conversation, self.test_conversation)
         self.assertEqual(self.reader.current_exchange_index, 0)
 
-    def test_normalize_text(self):
-        # Test the _normalize_text method
-        text = "  This   is  a  test  with   extra   spaces  "
-        normalized = self.reader._normalize_text(text)
-        self.assertEqual(normalized, "This is a test with extra spaces")
-
-    def test_extract_instruction(self):
-        # Test the _extract_instruction method
-        prompt = "Some text\n\nINSTRUCTION:\nThis is the instruction\n\nMore text"
-        instruction = self.reader._extract_instruction(prompt)
-        self.assertEqual(instruction, "This is the instruction")
-
-        # Test with no instruction
-        prompt = "Some text without an instruction"
-        instruction = self.reader._extract_instruction(prompt)
-        self.assertEqual(instruction, "")
-
-    def test_prompts_match(self):
-        # Test exact match
-        self.assertTrue(self.reader._prompts_match("Test prompt", "Test prompt"))
-
-        # Test whitespace normalization
-        self.assertTrue(self.reader._prompts_match("  Test   prompt  ", "Test prompt"))
-
-        # Test instruction matching
-        prompt1 = "Text\n\nINSTRUCTION:\nUpdate hero\n\nMore text"
-        prompt2 = "Different text\n\nINSTRUCTION:\nUpdate hero\n\nDifferent more text"
-        self.assertTrue(self.reader._prompts_match(prompt1, prompt2))
-
-        # Test substring matching
-        self.assertTrue(self.reader._prompts_match("This is a test", "This is a test with more text"))
-
-        # Test non-matching
-        self.assertFalse(self.reader._prompts_match("Test A", "Test B"))
-
     def test_get_response_for_prompt_sequential(self):
         # Test with the first prompt
         response = self.reader.get_response_for_prompt(self.test_prompt1)
         self.assertEqual(response, self.test_response1)
         self.assertEqual(self.reader.current_exchange_index, 1)
 
-        # Test with the second prompt with extra whitespace (should still match)
-        response = self.reader.get_response_for_prompt("  " + self.test_prompt2 + "  ")
+        # Test with the second prompt
+        response = self.reader.get_response_for_prompt(self.test_prompt2)
         self.assertEqual(response, self.test_response2)
         self.assertEqual(self.reader.current_exchange_index, 2)
 

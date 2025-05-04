@@ -25,43 +25,6 @@ class ConversationReader:
             logger.error(f"Error loading conversation file: {e}")
             raise
 
-    def _normalize_text(self, text: str) -> str:
-        """Normalize text by removing extra whitespace for comparison"""
-        # Replace multiple whitespace with a single space
-        normalized = ' '.join(text.split())
-        return normalized
-
-    def _extract_instruction(self, prompt: str) -> str:
-        """Extract the instruction part from a prompt"""
-        import re
-        instruction_match = re.search(r"INSTRUCTION:\s*(.*?)(?:\n\n|$)", prompt, re.DOTALL)
-        return instruction_match.group(1).strip() if instruction_match else ""
-
-    def _prompts_match(self, expected: str, received: str) -> bool:
-        """Check if prompts match using various strategies"""
-        # Strategy 1: Exact match after normalization
-        if self._normalize_text(expected) == self._normalize_text(received):
-            return True
-
-        # Strategy 2: Check if the instructions match
-        expected_instruction = self._extract_instruction(expected)
-        received_instruction = self._extract_instruction(received)
-
-        if expected_instruction and received_instruction and expected_instruction == received_instruction:
-            logger.info("Prompts match based on identical instructions")
-            return True
-
-        # Strategy 3: Check if one contains the other
-        norm_expected = self._normalize_text(expected)
-        norm_received = self._normalize_text(received)
-
-        if norm_expected in norm_received or norm_received in norm_expected:
-            logger.info("Prompts match based on substring containment")
-            return True
-
-        # No match found
-        return False
-
     def get_response_for_prompt(self, prompt: str) -> Optional[str]:
         # Check if we've reached the end of the conversation
         if self.current_exchange_index >= len(self.conversation["exchanges"]):
@@ -70,10 +33,9 @@ class ConversationReader:
 
         # Get the current exchange
         current_exchange = self.conversation["exchanges"][self.current_exchange_index]
-        expected_prompt = current_exchange["prompt"]["text"]
 
-        # Check if the prompts match using our flexible matching
-        if self._prompts_match(expected_prompt, prompt):
+        # Check if the prompt matches exactly
+        if current_exchange["prompt"]["text"] == prompt:
             # Move to the next exchange for the next call
             self.current_exchange_index += 1
             logger.info(f"Matched prompt at exchange index {self.current_exchange_index - 1}")
@@ -81,20 +43,14 @@ class ConversationReader:
         else:
             # Log the mismatch details for debugging
             logger.error(f"Prompt mismatch at exchange index {self.current_exchange_index}")
-            logger.error(f"Expected (normalized): {self._normalize_text(expected_prompt)[:100]}...")
-            logger.error(f"Received (normalized): {self._normalize_text(prompt)[:100]}...")
-
-            # Extract and compare instructions
-            expected_instruction = self._extract_instruction(expected_prompt)
-            received_instruction = self._extract_instruction(prompt)
-            logger.error(f"Expected instruction: {expected_instruction}")
-            logger.error(f"Received instruction: {received_instruction}")
+            logger.error(f"Expected: {current_exchange['prompt']['text'][:100]}...")
+            logger.error(f"Received: {prompt[:100]}...")
 
             # Raise an error with details about the mismatch
             raise ValueError(
                 f"Prompt does not match the expected prompt at position {self.current_exchange_index}. "
-                f"Expected instruction: '{expected_instruction}' "
-                f"Received instruction: '{received_instruction}'"
+                f"Expected: {current_exchange['prompt']['text'][:50]}... "
+                f"Received: {prompt[:50]}..."
             )
 
     def get_tool_calls_for_prompt(self) -> List[Dict[str, Any]]:

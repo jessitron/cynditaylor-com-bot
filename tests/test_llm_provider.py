@@ -70,24 +70,6 @@ class TestFrankProvider(unittest.TestCase):
         with self.assertRaises(ValueError):
             provider.generate(prompt)
 
-    @patch('src.llm.frank_provider.ConversationReader')
-    def test_generate_end_of_conversation(self, mock_reader_class):
-        # Setup mock reader
-        mock_reader = MagicMock()
-        mock_reader.get_response_for_prompt.side_effect = ValueError("End of conversation reached, no more exchanges available")
-        mock_reader_class.return_value = mock_reader
-
-        # Create provider
-        provider = FrankProvider()
-
-        # Test the generate method
-        prompt = "Test prompt"
-
-        # When end of conversation is reached, the provider should return a completion message
-        response = provider.generate(prompt)
-        self.assertIn("I've completed the task", response)
-        self.assertIn("hero section", response)
-
     def test_get_name(self):
         with patch('src.llm.frank_provider.ConversationReader'):
             provider = FrankProvider(model="test_model")
