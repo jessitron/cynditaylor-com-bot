@@ -1,4 +1,3 @@
-import json
 import os
 import logging
 
@@ -22,14 +21,13 @@ class FrankProvider(LLMProvider):
 
     @tracer.start_as_current_span("Initialize Frank")
     def start_conversation(self) -> ConversationPartner:
-
-        # Read the conversation. Get the array of exchanges from it.
+        # Read the conversation
         span = trace.get_current_span()
         span.set_attribute("app.conversation-reader.filename", CONVERSATION_FILE)
         try:
             conversation = ConversationReader(CONVERSATION_FILE).load_conversation()
-        except (json.JSONDecodeError, FileNotFoundError) as e:
+        except (FileNotFoundError, ValueError) as e:
             logger.error(f"Error loading conversation file: {e}")
             raise
 
-        return LoggingConversationPartner(Frank(conversation["exchanges"]))
+        return LoggingConversationPartner(Frank(conversation.exchanges))

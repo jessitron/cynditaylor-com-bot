@@ -4,14 +4,18 @@ import uuid
 import datetime
 from typing import Dict, Any, List, Optional
 
+from src.conversation.types import Conversation, Exchange, Prompt, Response, PromptMetadata, ToolCall
+
 
 class ConversationLogger:
     def __init__(self, output_dir: str = "conversation_history"):
         self.output_dir = output_dir
-        self.conversation_id = str(uuid.uuid4())
-        self.timestamp = datetime.datetime.now()
-        self.exchanges = []
-        self.previous_prompt = None # TODO: use a structured prompt so I don't have to retro this
+        self.conversation = Conversation(
+            conversation_id=str(uuid.uuid4()),
+            timestamp=datetime.datetime.now(),
+            exchanges=[]
+        )
+        self.previous_prompt_text = None
 
     def find_new_portion(self, current_prompt: str, previous_prompt: Optional[str]) -> Optional[str]:
         if not previous_prompt:
@@ -27,7 +31,7 @@ class ConversationLogger:
 
         return current_prompt[i:].strip()
 
-    def log_exchange(self, prompt: str, response: str, metadata: Dict[str, Any] = None,
+    def log_exchange(self, prompt_text: str, response_text: str, metadata: Dict[str, Any] = None,
                     tool_calls: List[Dict[str, Any]] = None) -> None:
         if metadata is None:
             metadata = {}
@@ -36,30 +40,51 @@ class ConversationLogger:
             tool_calls = []
 
         # Find the new portion of the prompt
-        new_portion = self.find_new_portion(prompt, self.previous_prompt)
+        new_portion = self.find_new_portion(prompt_text, self.previous_prompt_text)
 
-        # Create the exchange object
-        exchange = {
-            "id": f"exchange-{len(self.exchanges) + 1}",
-            "prompt": {
-                "text": prompt,
-                "metadata": metadata
-            },
-            "response": {
-                "text": response,
-                "tool_calls": tool_calls
-            }
-        }
+        # Create prompt metadata
+        prompt_metadata = PromptMetadata(
+            temperature=metadata.get("temperature", 0.7),
+            max_tokens=metadata.get("max_tokens", 1000),
+            model=metadata.get("model")
+        )
 
-        # Add the new portion if it exists
-        if new_portion:
-            exchange["prompt"]["new_portion"] = new_portion
+        # Create the prompt
+        prompt = Prompt(
+            text=prompt_text,
+            metadata=prompt_metadata,
+            new_portion=new_portion
+        )
 
-        # Add the exchange to the list
-        self.exchanges.append(exchange)
+        # Create the tool calls
+        tool_call_objects = []
+        for tc in tool_calls:
+            tool_call = ToolCall(
+                tool_name=tc.get("tool_name", ""),
+                parameters=tc.get("parameters", {}),
+                result=tc.get("result")
+            )
+            tool_call_objects.append(tool_call)
+
+        # Create the response
+        response = Response(
+            text=response_text,
+            tool_calls=tool_call_objects
+        )
+
+        # Create the exchange
+        exchange_id = f"exchange-{len(self.conversation.exchanges) + 1}"
+        exchange = Exchange(
+            id=exchange_id,
+            prompt=prompt,
+            response=response
+        )
+
+        # Add the exchange to the conversation
+        self.conversation.exchanges.append(exchange)
 
         # Update the previous prompt
-        self.previous_prompt = prompt
+        self.previous_prompt_text = prompt_text
 
         # Save the conversation after each exchange
         self.save()
@@ -67,31 +92,29 @@ class ConversationLogger:
     def log_tool_call(self, exchange_id: str, tool_name: str, parameters: Dict[str, Any],
                      result: Any) -> None:
         # Find the exchange
-        for exchange in self.exchanges:
-            if exchange["id"] == exchange_id:
+        for exchange in self.conversation.exchanges:
+            if exchange.id == exchange_id:
+                # Create the tool call
+                tool_call = ToolCall(
+                    tool_name=tool_name,
+                    parameters=parameters,
+                    result=result
+                )
+
                 # Add the tool call to the exchange
-                exchange["response"]["tool_calls"].append({
-                    "tool_name": tool_name,
-                    "parameters": parameters,
-                    "result": result
-                })
+                exchange.response.tool_calls.append(tool_call)
                 break
 
         # Save the conversation after logging the tool call
         self.save()
 
     def filename(self) -> str:
-        date_str = self.timestamp.strftime("%Y%m%d_%H%M%S")
-        return f"conversation_{date_str}_{self.conversation_id[:8]}.json"
+        date_str = self.conversation.timestamp.strftime("%Y%m%d_%H%M%S")
+        return f"conversation_{date_str}_{self.conversation.conversation_id[:8]}.json"
 
     def save(self) -> str:
-        # Create the conversation history object
-        conversation_history = {
-            "version": "1.0",
-            "conversation_id": self.conversation_id,
-            "timestamp": self.timestamp.isoformat(),
-            "exchanges": self.exchanges
-        }
+        # Convert the conversation to a dictionary
+        conversation_dict = self.conversation.to_dict()
 
         file_path = os.path.join(self.output_dir, self.filename())
 
@@ -100,6 +123,6 @@ class ConversationLogger:
 
         # Write the conversation history to the file
         with open(file_path, "w") as f:
-            json.dump(conversation_history, f, indent=2)
+            json.dump(conversation_dict, f, indent=2)
 
         return file_path
