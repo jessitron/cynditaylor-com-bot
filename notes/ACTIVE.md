@@ -47,7 +47,7 @@ In a Conversation, the first exchange should have this structure:
 
 Then subsequent exchanges, after tool calls, should have this structure:
 
-```json 
+```json
 {
     "id": "exchange-2",
     "prompt": {
@@ -58,21 +58,43 @@ Then subsequent exchanges, after tool calls, should have this structure:
                 "result": "Tool execution result"
             }
         ],
-        "new_portion": "only the text that was not in the previous prompt",
-        "text": "the whole prompt to send this time",
+        "new_text": "only the text that was not in the previous prompt",
+        "prompt_text": "the whole prompt to send this time",
         "metadata": {
             ... whatever...
         }
     },
     "response": {
-        "text": "Follow-up response from the LLM... maybe it doesn't have tool calls this time"
+        "response_text": "Follow-up response from the LLM... maybe it doesn't have tool calls this time"
     }
 }
 ```
 
-[] change the structure of the Conversation types
-[] make the agent send a prompt in this structure
-[] make the test conversation follow this structure
-[] make Frank return a response object including tool calls, as in the replay
-[] the Agent no longer tries to log tool call results; instead it includes them in the Prompt structure
-[] that way the ConversationLogger can just log the tool call results with the prompt, instead of trying to cram them into the previous exchange.
+[x] change the structure of the Conversation types
+[x] make the agent send a prompt in this structure
+[x] make the test conversation follow this structure
+[x] make Frank return a response object including tool calls, as in the replay
+[x] the Agent no longer tries to log tool call results; instead it includes them in the Prompt structure
+[x] that way the ConversationLogger can just log the tool call results with the prompt, instead of trying to cram them into the previous exchange.
+
+All tasks have been completed. The code now follows the new structure for recording tool call results in the prompt structure rather than trying to add them to the previous exchange's response. This makes the conversation flow more natural and easier to follow.
+
+## Corrections
+
+✅ Completed corrections to use proper dataclass objects:
+
+[x] Rename `text` to `prompt_text` in the `Prompt` class
+[x] Rename `text` to `response_text` in the `Response` class
+[x] Update the `to_dict` and `from_dict` methods to use the new field names
+[x] Change the `get_response_for_prompt` method to accept a `Prompt` object and return a `Response` object
+[x] Update the Frank LLM implementation to accept a `Prompt` object and return a `Response` object
+[x] Update the LoggingConversationPartner to handle `Prompt` and `Response` objects
+[x] Update the Agent implementation to create and use `Prompt` and `Response` objects
+[x] Update the test conversation file to use the new field names
+
+All corrections have been completed. The code now uses proper dataclass objects for Prompt and Response throughout the codebase, rather than passing around strings. This makes the code more type-safe and easier to maintain.
+
+## Corrections
+
+[] The log_exchange method in ConversationLogger should take 2 objects, not a whole slew of primitives.
+[] The Agent should never extract tool calls. Tool calls come in the Response object from the ConversationPartner.

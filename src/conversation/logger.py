@@ -32,15 +32,19 @@ class ConversationLogger:
         return current_prompt[i:].strip()
 
     def log_exchange(self, prompt_text: str, response_text: str, metadata: Dict[str, Any] = None,
-                    tool_calls: List[Dict[str, Any]] = None) -> None:
+                    prompt_tool_calls: List[Dict[str, Any]] = None,
+                    response_tool_calls: List[Dict[str, Any]] = None) -> None:
         if metadata is None:
             metadata = {}
 
-        if tool_calls is None:
-            tool_calls = []
+        if prompt_tool_calls is None:
+            prompt_tool_calls = []
+
+        if response_tool_calls is None:
+            response_tool_calls = []
 
         # Find the new portion of the prompt
-        new_portion = self.find_new_portion(prompt_text, self.previous_prompt_text)
+        new_text = self.find_new_portion(prompt_text, self.previous_prompt_text)
 
         # Create prompt metadata
         prompt_metadata = PromptMetadata(
@@ -49,27 +53,38 @@ class ConversationLogger:
             model=metadata.get("model")
         )
 
-        # Create the prompt
-        prompt = Prompt(
-            text=prompt_text,
-            metadata=prompt_metadata,
-            new_portion=new_portion
-        )
-
-        # Create the tool calls
-        tool_call_objects = []
-        for tc in tool_calls:
+        # Create the prompt tool calls
+        prompt_tool_call_objects = []
+        for tc in prompt_tool_calls:
             tool_call = ToolCall(
                 tool_name=tc.get("tool_name", ""),
                 parameters=tc.get("parameters", {}),
                 result=tc.get("result")
             )
-            tool_call_objects.append(tool_call)
+            prompt_tool_call_objects.append(tool_call)
+
+        # Create the prompt
+        prompt = Prompt(
+            prompt_text=prompt_text,
+            metadata=prompt_metadata,
+            new_text=new_text,
+            tool_calls=prompt_tool_call_objects
+        )
+
+        # Create the response tool calls
+        response_tool_call_objects = []
+        for tc in response_tool_calls:
+            tool_call = ToolCall(
+                tool_name=tc.get("tool_name", ""),
+                parameters=tc.get("parameters", {}),
+                result=tc.get("result")
+            )
+            response_tool_call_objects.append(tool_call)
 
         # Create the response
         response = Response(
-            text=response_text,
-            tool_calls=tool_call_objects
+            response_text=response_text,
+            tool_calls=response_tool_call_objects
         )
 
         # Create the exchange
@@ -89,24 +104,7 @@ class ConversationLogger:
         # Save the conversation after each exchange
         self.save()
 
-    def log_tool_call(self, exchange_id: str, tool_name: str, parameters: Dict[str, Any],
-                     result: Any) -> None:
-        # Find the exchange
-        for exchange in self.conversation.exchanges:
-            if exchange.id == exchange_id:
-                # Create the tool call
-                tool_call = ToolCall(
-                    tool_name=tool_name,
-                    parameters=parameters,
-                    result=result
-                )
-
-                # Add the tool call to the exchange
-                exchange.response.tool_calls.append(tool_call)
-                break
-
-        # Save the conversation after logging the tool call
-        self.save()
+    # The log_tool_call method has been removed as tool calls are now included in the prompt structure
 
     def filename(self) -> str:
         date_str = self.conversation.timestamp.strftime("%Y%m%d_%H%M%S")

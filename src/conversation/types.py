@@ -18,9 +18,10 @@ class PromptMetadata:
 @dataclass
 class Prompt:
     """A prompt sent to an LLM."""
-    text: str
+    prompt_text: str
     metadata: PromptMetadata = field(default_factory=PromptMetadata)
-    new_portion: Optional[str] = None
+    new_text: Optional[str] = None
+    tool_calls: List['ToolCall'] = field(default_factory=list)
 
 
 @dataclass
@@ -34,7 +35,7 @@ class ToolCall:
 @dataclass
 class Response:
     """A response from an LLM."""
-    text: str
+    response_text: str
     tool_calls: List[ToolCall] = field(default_factory=list)
 
 
@@ -64,16 +65,24 @@ class Conversation:
                 {
                     "id": exchange.id,
                     "prompt": {
-                        "text": exchange.prompt.text,
+                        "prompt_text": exchange.prompt.prompt_text,
                         "metadata": {
                             "temperature": exchange.prompt.metadata.temperature,
                             "max_tokens": exchange.prompt.metadata.max_tokens,
                             **({"model": exchange.prompt.metadata.model} if exchange.prompt.metadata.model else {})
                         },
-                        **({"new_portion": exchange.prompt.new_portion} if exchange.prompt.new_portion else {})
+                        **({"new_text": exchange.prompt.new_text} if exchange.prompt.new_text else {}),
+                        **({"tool_calls": [
+                            {
+                                "tool_name": tool_call.tool_name,
+                                "parameters": tool_call.parameters,
+                                "result": tool_call.result
+                            }
+                            for tool_call in exchange.prompt.tool_calls
+                        ]} if exchange.prompt.tool_calls else {})
                     },
                     "response": {
-                        "text": exchange.response.text,
+                        "response_text": exchange.response.response_text,
                         "tool_calls": [
                             {
                                 "tool_name": tool_call.tool_name,
@@ -93,7 +102,7 @@ class Conversation:
         """Create a Conversation object from a dictionary."""
         # Parse the timestamp
         timestamp = datetime.datetime.fromisoformat(data["timestamp"]) if "timestamp" in data else datetime.datetime.now()
-        
+
         # Create the exchanges
         exchanges = []
         for exchange_data in data.get("exchanges", []):
@@ -104,12 +113,23 @@ class Conversation:
                 max_tokens=prompt_data.get("metadata", {}).get("max_tokens", 1000),
                 model=prompt_data.get("metadata", {}).get("model")
             )
+            # Create prompt tool calls if they exist
+            prompt_tool_calls = []
+            for tool_call_data in prompt_data.get("tool_calls", []):
+                tool_call = ToolCall(
+                    tool_name=tool_call_data.get("tool_name", ""),
+                    parameters=tool_call_data.get("parameters", {}),
+                    result=tool_call_data.get("result")
+                )
+                prompt_tool_calls.append(tool_call)
+
             prompt = Prompt(
-                text=prompt_data.get("text", ""),
+                prompt_text=prompt_data.get("prompt_text", ""),
                 metadata=metadata,
-                new_portion=prompt_data.get("new_portion")
+                new_text=prompt_data.get("new_text"),
+                tool_calls=prompt_tool_calls
             )
-            
+
             # Create the response
             response_data = exchange_data.get("response", {})
             tool_calls = []
@@ -120,21 +140,21 @@ class Conversation:
                     result=tool_call_data.get("result")
                 )
                 tool_calls.append(tool_call)
-            
+
             response = Response(
-                text=response_data.get("text", ""),
+                response_text=response_data.get("response_text", ""),
                 tool_calls=tool_calls
             )
-            
+
             # Create the exchange
             exchange = Exchange(
                 id=exchange_data.get("id", f"exchange-{len(exchanges) + 1}"),
                 prompt=prompt,
                 response=response
             )
-            
+
             exchanges.append(exchange)
-        
+
         # Create the conversation
         return cls(
             version=data.get("version", "1.0"),

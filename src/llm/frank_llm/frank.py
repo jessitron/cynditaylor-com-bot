@@ -4,7 +4,7 @@ import logging
 from opentelemetry import trace
 
 from src.llm.conversation_partner import ConversationPartner
-from src.conversation.types import Exchange
+from src.conversation.types import Exchange, ToolCall, Prompt, Response
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ class Frank(ConversationPartner):
         self.exchanges = exchanges
         self.index = 0
 
-    def get_response_for_prompt(self, prompt: str, **_) -> str:
+    def get_response_for_prompt(self, prompt: Prompt, **_) -> Response:
         if self.index >= len(self.exchanges):
             raise ValueError("End of conversation reached, no more exchanges available")
 
@@ -24,14 +24,19 @@ class Frank(ConversationPartner):
         span.set_attribute("app.frank.index", self.index)
 
         current_exchange = self.exchanges[self.index]
-        if current_exchange.prompt.text != prompt:
+        if current_exchange.prompt.prompt_text != prompt.prompt_text:
             logger.warning(f"Prompt mismatch at index {self.index}",
-                          extra={"prompt.expected": current_exchange.prompt.text,
-                                "prompt.received": prompt})
+                          extra={"prompt.expected": current_exchange.prompt.prompt_text,
+                                "prompt.received": prompt.prompt_text})
 
-        response_text = current_exchange.response.text
+        # Get the response from the current exchange
+        response = Response(
+            response_text=current_exchange.response.response_text,
+            tool_calls=current_exchange.response.tool_calls
+        )
+
         self.index += 1
-        return response_text
+        return response
 
     def finish_conversation(self) -> None:
         if self.index < len(self.exchanges):

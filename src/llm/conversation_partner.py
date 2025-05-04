@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from src.llm.prompt import Prompt # TODO: use a structured prompt
+from src.conversation.types import Prompt, Response
 
 class ConversationPartner(ABC):
     """
@@ -8,7 +8,7 @@ class ConversationPartner(ABC):
     """
 
     @abstractmethod
-    def get_response_for_prompt(self, prompt: str) -> str:
+    def get_response_for_prompt(self, prompt: Prompt) -> Response:
         pass
 
     @abstractmethod

@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 from src.llm.frank_llm.frank_provider import FrankProvider
 from src.agent.tools.file_tools import ListFilesTool, ReadFileTool, WriteFileTool
 from src.agent.tools.git_tools import CommitChangesTool, PushChangesTool
+from src.conversation.types import Prompt, Response, ToolCall, PromptMetadata
 
 from opentelemetry import trace
 
@@ -108,7 +109,8 @@ class WebsiteAgent:
             # Start the conversation loop
             max_iterations = 10
             conversation_history = []
-            current_exchange_id = None
+            # Initialize kwargs for tracking tool calls
+            kwargs = {"prompt_tool_calls": []}
 
             # Add the initial prompt to the conversation history
             conversation_history.append({"role": "user", "content": prompt})
@@ -118,18 +120,36 @@ class WebsiteAgent:
                     # Generate a response using the LLM
                     span.set_attribute("app.llm.prompt", prompt)
                     span.set_attribute("app.iteration", i + 1)
-                    response = llm.get_response_for_prompt(prompt)
+
+                    # Get any prompt tool calls from previous iterations
+                    prompt_tool_calls = kwargs.get("prompt_tool_calls", [])
+
+                    # Create tool call objects
+                    tool_call_objects = []
+                    for tc in prompt_tool_calls:
+                        tool_call = ToolCall(
+                            tool_name=tc.get("tool_name", ""),
+                            parameters=tc.get("parameters", {}),
+                            result=tc.get("result")
+                        )
+                        tool_call_objects.append(tool_call)
+
+                    # Create a Prompt object
+                    prompt_obj = Prompt(
+                        prompt_text=prompt,
+                        metadata=PromptMetadata(),
+                        tool_calls=tool_call_objects
+                    )
+
+                    # Call the LLM with the prompt object
+                    response = llm.get_response_for_prompt(prompt_obj)
                     span.set_attribute("app.llm.response", response)
 
                     # Add the response to the conversation history
-                    conversation_history.append({"role": "assistant", "content": response})
-
-                    # Get the current exchange ID from the conversation logger
-                    if hasattr(llm, 'conversation_logger'):
-                        current_exchange_id = f"exchange-{len(llm.conversation_logger.exchanges)}"
+                    conversation_history.append({"role": "assistant", "content": response.response_text})
 
                     # Check if the response contains a tool call
-                    tool_call = self._extract_tool_call(response)
+                    tool_call = self._extract_tool_call(response.response_text)
 
                     if tool_call:
                         # Execute the tool
@@ -145,14 +165,18 @@ class WebsiteAgent:
                             "content": tool_result
                         })
 
-                        # Log the tool call in the conversation logger
-                        if hasattr(llm, 'conversation_logger') and current_exchange_id:
-                            llm.conversation_logger.log_tool_call(
-                                current_exchange_id,
-                                tool_name,
-                                tool_args,
-                                tool_result
-                            )
+                        # Create a tool call object for the next prompt
+                        tool_call_obj = {
+                            "tool_name": tool_name,
+                            "parameters": tool_args,
+                            "result": tool_result
+                        }
+
+                        # Add the tool call to the prompt_tool_calls list for the next iteration
+                        prompt_tool_calls.append(tool_call_obj)
+
+                        # Update kwargs for the next iteration
+                        kwargs["prompt_tool_calls"] = prompt_tool_calls
 
                         # Update the prompt with the tool result
                         prompt = self._update_prompt_with_tool_result(
@@ -162,11 +186,11 @@ class WebsiteAgent:
                             tool_result
                         )
                     else:
-                        # No tool call, return the final response
-                        return response
+                        # No tool call, return the final response text
+                        return response.response_text
 
-            # If we reach the maximum number of iterations, return the last response
-            return response
+            # If we reach the maximum number of iterations, return the last response text
+            return response.response_text
         finally:
             # Always call finish_conversation to ensure proper cleanup
             llm.finish_conversation()
