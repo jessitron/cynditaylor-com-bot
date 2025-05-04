@@ -143,7 +143,7 @@ class WebsiteAgent:
 
                     # Call the LLM with the prompt object
                     response = llm.get_response_for_prompt(prompt_obj)
-                    span.set_attribute("app.llm.response", response)
+                    span.set_attribute("app.llm.response", response.response_text)
 
                     # Add the response to the conversation history
                     conversation_history.append({"role": "assistant", "content": response.response_text})

@@ -18,19 +18,9 @@ class LoggingConversationPartner(ConversationPartner):
         self.conversation_logger = ConversationLogger(output_dir=output_dir)
         logger.info(f"Initialized LoggingConversationPartner with logger: {self.conversation_logger.filename()}")
 
-    def get_response_for_prompt(self, prompt: Prompt, **kwargs) -> Response:
+    def get_response_for_prompt(self, prompt: Prompt) -> Response:
         # Get the response from the wrapped conversation partner
-        response = self.conversation_partner.get_response_for_prompt(prompt, **kwargs)
-
-        # Update metadata in the prompt if needed
-        if kwargs.get("temperature") or kwargs.get("max_tokens") or kwargs.get("model"):
-            # Only update if not already set
-            if not prompt.metadata.model:
-                prompt.metadata.model = self.get_name()
-            if kwargs.get("temperature"):
-                prompt.metadata.temperature = kwargs.get("temperature")
-            if kwargs.get("max_tokens"):
-                prompt.metadata.max_tokens = kwargs.get("max_tokens")
+        response = self.conversation_partner.get_response_for_prompt(prompt)
 
         # Log the exchange with the prompt and response objects directly
         self.conversation_logger.log_exchange(prompt, response)
