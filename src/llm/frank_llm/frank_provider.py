@@ -3,6 +3,7 @@ import logging
 
 from opentelemetry import trace
 
+from src.llm.opentelemetry_conversation_partner import OpenTelemetryConversationPartnerDecorator
 from src.llm.conversation_reader import ConversationReader
 from src.llm.frank_llm.frank import Frank
 from src.llm.logging_conversation_partner import LoggingConversationPartner
@@ -30,4 +31,4 @@ class FrankProvider(LLMProvider):
             logger.error(f"Error loading conversation file: {e}")
             raise
 
-        return LoggingConversationPartner(Frank(conversation.exchanges))
+        return OpenTelemetryConversationPartnerDecorator(LoggingConversationPartner(Frank(conversation.exchanges)))

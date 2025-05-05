@@ -3,4 +3,4 @@
 - do not implement fallbacks. On failure, raise a clear error.
 - whenever you have a plan, write it to notes/ACTIVE.md instead of to your output.
 - write the summary of what you did to notes/ACTIVE.md instead of to your output.
-- don't write tests unless I ask you to.
+- don't write tests unless I ask you to.vv
