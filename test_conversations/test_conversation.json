@@ -47,7 +47,7 @@
         "tool_calls": [
           {
             "tool_name": "read_file",
-            "parameters": {"file_path": "index.html"},
+            "parameters": {"file_path": "index.html"}
           }
         ]
       }
