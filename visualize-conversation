@@ -6,19 +6,19 @@
 if [ $# -eq 0 ]; then
     # If no file is provided, use the most recent conversation history file
     LATEST_FILE=$(ls -t conversation_history/*.json 2>/dev/null | head -n 1)
-    
+
     if [ -z "$LATEST_FILE" ]; then
         echo "Error: No conversation history files found in conversation_history directory."
         echo "Usage: $0 [file]"
         exit 1
     fi
-    
+
     echo "Using most recent conversation history file: $LATEST_FILE"
     FILE="$LATEST_FILE"
 else
     # Use the provided file
     FILE="$1"
-    
+
     # Check if the file exists
     if [ ! -f "$FILE" ]; then
         echo "Error: File '$FILE' does not exist."
@@ -27,4 +27,4 @@ else
 fi
 
 # Run the visualization script
-python3 src/conversation/visualize.py "$FILE"
+python3 visualize_conversation.py "$FILE"
