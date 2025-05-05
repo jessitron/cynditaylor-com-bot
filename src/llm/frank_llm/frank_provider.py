@@ -15,7 +15,7 @@ tracer = trace.get_tracer("frank-the-fake-llm")
 logger = logging.getLogger(__name__)
 
 # Hard-coded conversation file path
-CONVERSATION_FILE = os.path.join(os.path.dirname(__file__), "conversations", "test_conversation.json")
+CONVERSATION_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "test_conversations", "test_conversation.json")
 
 class FrankProvider(LLMProvider):
 

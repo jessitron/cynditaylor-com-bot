@@ -5,7 +5,7 @@ class TestConversationReader(unittest.TestCase):
 
     def test_load_conversation_history(self):
         # Test loading the conversation history file
-        reader = ConversationReader("conversation_history/test_conversation.json")
+        reader = ConversationReader("test_conversations/test_conversation.json")
         conversation = reader.load_conversation()
 
         # Check that the conversation was loaded correctly
