@@ -14,13 +14,9 @@ class OpenTelemetryConversationPartnerDecorator(ConversationPartner):
 
     def __init__(self, conversation_partner: ConversationPartner):
         self.conversation_partner = conversation_partner
-        self.trace_start_time = None
+        self.trace_start_time = int(time.time())
 
     def get_response_for_prompt(self, prompt: Prompt) -> Response:
-        # Store the trace start time if this is the first prompt
-        if self.trace_start_time is None:
-            self.trace_start_time = int(time.time())
-
         # Create a span for this exchange
         with tracer.start_as_current_span("LLM Exchange") as span:
             # Add attributes to the span for the prompt
@@ -50,35 +46,12 @@ class OpenTelemetryConversationPartnerDecorator(ConversationPartner):
         return f"OpenTelemetry-{self.conversation_partner.get_name()}"
 
     def finish_conversation(self) -> dict:
-        # Create a span for the finish_conversation call
         with tracer.start_as_current_span("LLM Finish Conversation") as span:
-            # Get the trace link
-            trace_link = self.link_to_current_trace()
-
-            # Get the current time for trace_end_ts
-            trace_end_time = int(time.time())
 
             # Delegate to the wrapped conversation partner
             metadata = self.conversation_partner.finish_conversation()
 
-            # If we have a trace link, add it to the metadata
-            if trace_link:
-                # Create a dictionary if none was returned
-                if not metadata:
-                    metadata = {}
-
-                # Add the trace link to the metadata
-                metadata["honeycomb_trace_url"] = trace_link
-
-                # Add trace start and end times
-                if self.trace_start_time:
-                    # Set trace_start_ts to 5 minutes before the actual start time
-                    trace_start_ts = self.trace_start_time - 300  # 5 minutes in seconds
-                    metadata["trace_start_ts"] = trace_start_ts
-
-                    # Set trace_end_ts to 5 minutes after the actual end time
-                    trace_end_ts = trace_end_time + 300  # 5 minutes in seconds
-                    metadata["trace_end_ts"] = trace_end_ts
+            metadata["honeycomb_trace_url"] = self.link_to_current_trace()
 
             return metadata
 
@@ -102,19 +75,17 @@ class OpenTelemetryConversationPartnerDecorator(ConversationPartner):
             return None
 
         # Get the current span
-        current_span = trace.get_current_span()
+        current_span_context = trace.get_current_span().get_span_context()
 
-        # Get the context from the current span
-        current_span_context = current_span.get_span_context()
-
-        # Create a URL to the current span in Honeycomb
         trace_id = current_span_context.trace_id
-        # convert the trace_id to a hex string
         trace_id = hex(trace_id)[2:]
         span_id = current_span_context.span_id
-        # convert the span_id to a hex string
         span_id = hex(span_id)[2:]
-        url = f"https://ui.honeycomb.io/{team_slug}/environments/{environment_slug}/trace?trace_id={trace_id}&span_id={span_id}"
+
+        trace_start_ts = self.trace_start_time - 300  # 5 minutes in seconds
+        trace_end_ts = int(time.time()) + 300  # 5 minutes in seconds
+
+        url = f"https://ui.honeycomb.io/{team_slug}/environments/{environment_slug}/trace?trace_id={trace_id}&span_id={span_id}&trace_start_ts={trace_start_ts}&trace_end_ts={trace_end_ts}"
         logger.info(f"LLM conversation trace: {url}")
 
         return url
