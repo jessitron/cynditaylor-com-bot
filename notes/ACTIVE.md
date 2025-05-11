@@ -16,4 +16,13 @@ Next it's time to add an OpenTelemetryConversationPartnerDecorator, that wraps e
 - [x] Create plan
 - [x] Create new file for the decorator
 - [x] Implement the decorator class
-- [ ] Test the implementation
+
+## Next Step
+[] Define the link_to_current_span method.
+Find information about Honeycomb and OpenTelemetry in `notes/Clues-about-OpenTelemetry.md`
+
+## Later
+
+[] Make LoggingConversationPartner, in finish_conversation, accept a response from the downstream conversation partner, containing a dict of whatever fields. Include those fields in the conversation log.
+[] Make OpenTelemetryConversationPartnerDecorator, in finish_conversation, return a link to the trace in Honeycomb as metadata for the LoggingConversationPartner to record.
+[] Make OpenTelemetryConversationPartnerDecorator retain the start time of the trace, and set the trace_start_ts and trace_end_ts in the link correctly.

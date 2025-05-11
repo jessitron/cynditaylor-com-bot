@@ -1,5 +1,7 @@
 import logging
+import os
 from opentelemetry import trace
+import requests
 
 from src.llm.conversation_partner import ConversationPartner
 from src.conversation.types import Prompt, Response
@@ -43,6 +45,35 @@ class OpenTelemetryConversationPartnerDecorator(ConversationPartner):
 
     def finish_conversation(self) -> None:
         # Create a span for the finish_conversation call
-        with tracer.start_as_current_span("LLM Finish Conversation"):
+        with tracer.start_as_current_span("LLM Finish Conversation") as span:
+            self.link_to_current_trace();
             # Delegate to the wrapped conversation partner
             self.conversation_partner.finish_conversation()
+
+    def link_to_current_trace(self):
+        # Call Honeycomb Auth API to find out our team name
+        try:
+            response = requests.get(
+                "https://api.honeycomb.io/1/auth",
+                headers={"X-Honeycomb-Team": os.environ.get("HONEYCOMB_API_KEY")}
+            )
+            team_slug = response.json()["team"]["slug"]
+        except Exception as e:
+            logger.error(f"Failed to get team slug: {e}")
+            return
+        # get the current dataset from the environment
+        dataset_slug = os.environ.get("OTEL_SERVICE_NAME")
+
+        # Get the current span
+        current_span = trace.get_current_span()
+        
+        # Get the context from the current span
+        current_span_context = current_span.get_span_context()
+
+        # Create a URL to the current span in Honeycomb
+        trace_id = current_span_context.trace_id
+        span_id = current_span_context.span_id
+        url = f"https://ui.honeycomb.io/{team_slug}/datasets/{dataset_slug}/trace?trace_id={trace_id}&span_id={span_id}"
+        logger.info(f"LLM conversation trace: {url}")
+        
+        
