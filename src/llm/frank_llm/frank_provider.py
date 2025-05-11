@@ -31,4 +31,4 @@ class FrankProvider(LLMProvider):
             logger.error(f"Error loading conversation file: {e}")
             raise
 
-        return OpenTelemetryConversationPartnerDecorator(LoggingConversationPartner(Frank(conversation.exchanges)))
+        return LoggingConversationPartner(OpenTelemetryConversationPartnerDecorator(Frank(conversation.exchanges)))

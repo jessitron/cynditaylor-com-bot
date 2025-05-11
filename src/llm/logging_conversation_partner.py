@@ -1,4 +1,5 @@
 import logging
+import os
 
 from src.llm.conversation_partner import ConversationPartner
 from src.conversation.logger import ConversationLogger
@@ -32,15 +33,13 @@ class LoggingConversationPartner(ConversationPartner):
 
     def finish_conversation(self) -> dict:
         # Save the final conversation state
-        self.conversation_logger.save()
 
         # Get metadata from downstream conversation partner
         metadata = self.conversation_partner.finish_conversation()
 
-        # If metadata was returned, add it to the conversation log
-        if metadata and isinstance(metadata, dict):
-            # Add metadata to the conversation logger
-            self.conversation_logger.add_metadata(metadata)
-            self.conversation_logger.save()
+        output_file = self.conversation_logger.save(metadata)
+
+        # print the full path of the file we saved to
+        logger.info(f"Conversation saved to: {output_file}")
 
         return metadata
