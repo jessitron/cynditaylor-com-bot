@@ -23,6 +23,20 @@ Find information about Honeycomb and OpenTelemetry in `notes/Clues-about-OpenTel
 
 ## Next
 
-[] Make LoggingConversationPartner, in finish_conversation, accept a response from the downstream conversation partner, containing a dict of whatever fields. Include those fields in the conversation log.
-[] Make OpenTelemetryConversationPartnerDecorator, in finish_conversation, return a link to the trace in Honeycomb as metadata for the LoggingConversationPartner to record.
-[] Make OpenTelemetryConversationPartnerDecorator retain the start time of the trace, and set the trace_start_ts and trace_end_ts in the link correctly.
+[x] Make LoggingConversationPartner, in finish_conversation, accept a response from the downstream conversation partner, containing a dict of whatever fields. Include those fields in the conversation log.
+[x] Make OpenTelemetryConversationPartnerDecorator, in finish_conversation, return a link to the trace in Honeycomb as metadata for the LoggingConversationPartner to record.
+[x] Make OpenTelemetryConversationPartnerDecorator retain the start time of the trace, and set the trace_start_ts and trace_end_ts in the link correctly.
+
+## Completed Implementation
+
+1. Updated `LoggingConversationPartner.finish_conversation()` to accept metadata from downstream conversation partners and include it in the conversation log.
+2. Added `add_metadata` method to `ConversationLogger` to store and save metadata with the conversation.
+3. Updated `OpenTelemetryConversationPartnerDecorator` to:
+   - Store the trace start time
+   - Return a link to the trace in Honeycomb as metadata
+   - Include trace_start_ts and trace_end_ts in the metadata
+
+## Next Steps
+
+[] Test the implementation to ensure it works correctly
+[] Consider adding more attributes to the OpenTelemetry spans for better observability

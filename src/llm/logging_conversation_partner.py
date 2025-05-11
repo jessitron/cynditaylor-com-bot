@@ -30,8 +30,17 @@ class LoggingConversationPartner(ConversationPartner):
     def get_name(self) -> str:
         return f"Logging-{self.conversation_partner.get_name()}"
 
-    def finish_conversation(self) -> None:
+    def finish_conversation(self) -> dict:
         # Save the final conversation state
         self.conversation_logger.save()
 
-        self.conversation_partner.finish_conversation()
+        # Get metadata from downstream conversation partner
+        metadata = self.conversation_partner.finish_conversation()
+
+        # If metadata was returned, add it to the conversation log
+        if metadata and isinstance(metadata, dict):
+            # Add metadata to the conversation logger
+            self.conversation_logger.add_metadata(metadata)
+            self.conversation_logger.save()
+
+        return metadata

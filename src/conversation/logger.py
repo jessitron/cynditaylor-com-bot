@@ -16,6 +16,7 @@ class ConversationLogger:
             exchanges=[]
         )
         self.previous_prompt_text = None
+        self.metadata = {}
 
     def find_new_portion(self, current_prompt: str, previous_prompt: Optional[str]) -> Optional[str]:
         if not previous_prompt:
@@ -66,9 +67,22 @@ class ConversationLogger:
         date_str = self.conversation.timestamp.strftime("%Y%m%d_%H%M%S")
         return f"conversation_{date_str}_{self.conversation.conversation_id[:8]}.json"
 
+    def add_metadata(self, metadata: dict) -> None:
+        """
+        Add metadata to the conversation log.
+
+        Args:
+            metadata: A dictionary of metadata to add to the conversation log
+        """
+        self.metadata.update(metadata)
+
     def save(self) -> str:
         # Convert the conversation to a dictionary
         conversation_dict = self.conversation.to_dict()
+
+        # Add metadata if it exists
+        if self.metadata:
+            conversation_dict["metadata"] = self.metadata
 
         file_path = os.path.join(self.output_dir, self.filename())
 

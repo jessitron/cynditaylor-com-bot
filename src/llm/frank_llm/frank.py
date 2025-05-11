@@ -38,9 +38,10 @@ class Frank(ConversationPartner):
         self.index += 1
         return response
 
-    def finish_conversation(self) -> None:
+    def finish_conversation(self) -> dict:
         if self.index < len(self.exchanges):
             logger.warning(f"Conversation ended before all exchanges were used. Unused exchanges: {len(self.exchanges) - self.index}")
+        return {}
 
     def get_name(self) -> str:
         return "Frank"
