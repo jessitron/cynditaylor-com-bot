@@ -58,11 +58,10 @@ class OpenTelemetryConversationPartnerDecorator(ConversationPartner):
                 headers={"X-Honeycomb-Team": os.environ.get("HONEYCOMB_API_KEY")}
             )
             team_slug = response.json()["team"]["slug"]
+            environment_slug = response.json()["environment"]["slug"]
         except Exception as e:
             logger.error(f"Failed to get team slug: {e}")
             return
-        # get the current dataset from the environment
-        dataset_slug = os.environ.get("OTEL_SERVICE_NAME")
 
         # Get the current span
         current_span = trace.get_current_span()
@@ -72,8 +71,12 @@ class OpenTelemetryConversationPartnerDecorator(ConversationPartner):
 
         # Create a URL to the current span in Honeycomb
         trace_id = current_span_context.trace_id
+        # convert the trace_id to a hex string
+        trace_id = hex(trace_id)[2:]
         span_id = current_span_context.span_id
-        url = f"https://ui.honeycomb.io/{team_slug}/datasets/{dataset_slug}/trace?trace_id={trace_id}&span_id={span_id}"
+        # convert the span_id to a hex string
+        span_id = hex(span_id)[2:]
+        url = f"https://ui.honeycomb.io/{team_slug}/environments/{environment_slug}/trace?trace_id={trace_id}&span_id={span_id}"
         logger.info(f"LLM conversation trace: {url}")
         
         

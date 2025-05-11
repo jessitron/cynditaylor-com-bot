@@ -45,7 +45,7 @@ Response:
 Example:
 
 ```
-https://ui.honeycomb.io/<team>/environments/<environment>/datasets/<dataset>/trace?trace_id=<traceId>
+https://ui.honeycomb.io/<team>/environments/<environment>/trace?trace_id=<traceId>
   &span=<spanId>
   &trace_start_ts=<ts>
   &trace_end_ts=<ts>
