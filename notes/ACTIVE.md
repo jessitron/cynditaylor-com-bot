@@ -1,35 +1,42 @@
 # Active work for Augment Agent right now
 
-In this file, we will formulate a plan together. Separately, you will implement it.
+Next it's time to add an OpenTelemetryConversationPartnerDecorator, that wraps each exchange in a span.
 
-Our goal now is to make Frank work smoothly with the conversation history.
+## Plan:
 
-If you run the app with `./run` you will see some warnings:
+1. Create a new file `src/llm/opentelemetry_conversation_partner.py` that will contain the decorator class
+2. Implement the `OpenTelemetryConversationPartnerDecorator` class that:
+   - Follows the decorator pattern similar to `LoggingConversationPartner`
+   - Wraps each exchange (get_response_for_prompt call) in an OpenTelemetry span
+   - Adds relevant attributes to the span (prompt details, response details)
+   - Properly delegates to the wrapped conversation partner
+3. Update the necessary imports and ensure the decorator can be used in the codebase
 
-```
-WARNING - Prompt mismatch at index 0
-WARNING - Prompt mismatch at index 1
-WARNING - Prompt mismatch at index 2
-WARNING - Prompt mismatch at index 3
-```
+## Implementation Status:
+- [x] Create plan
+- [x] Create new file for the decorator
+- [x] Implement the decorator class
 
-I created test_conversation as a copy of a conversation history.
-It seems that the conversation history is not recording exactly what Frank sees. How can we fix the
-conversation history to be accurate?
+## Continuing
+[x] Define the link_to_current_span method.
+Find information about Honeycomb and OpenTelemetry in `notes/Clues-about-OpenTelemetry.md`
 
-## Solution Implemented
+## Next
 
-The issue was that the prompts in the test conversation file didn't match the actual prompts being sent by the WebsiteAgent. The WebsiteAgent adds a template around the instruction, but the test conversation file had different prompt text.
+[x] Make LoggingConversationPartner, in finish_conversation, accept a response from the downstream conversation partner, containing a dict of whatever fields. Include those fields in the conversation log.
+[x] Make OpenTelemetryConversationPartnerDecorator, in finish_conversation, return a link to the trace in Honeycomb as metadata for the LoggingConversationPartner to record.
+[] Make OpenTelemetryConversationPartnerDecorator retain the start time of the trace, and set the trace_start_ts and trace_end_ts in the link correctly.
 
-I implemented a solution that makes Frank more flexible with prompt matching:
+## Completed Implementation
 
-1. Modified the `Frank` class in `src/llm/frank_llm/frank.py` to:
-   - Extract the instruction part from both the expected and received prompts using a new `_extract_instruction` method
-   - Compare only the instruction parts instead of the full prompt text
-   - Log a warning only if the instruction parts don't match
+1. Updated `LoggingConversationPartner.finish_conversation()` to accept metadata from downstream conversation partners and include it in the conversation log.
+2. Added `add_metadata` method to `ConversationLogger` to store and save metadata with the conversation.
+3. Updated `OpenTelemetryConversationPartnerDecorator` to:
+   - Store the trace start time
+   - Return a link to the trace in Honeycomb as metadata
+   - Include trace_start_ts and trace_end_ts in the metadata
 
-2. Added tests for the new `_extract_instruction` method in `tests/test_frank.py` to ensure it works correctly.
+## Next Steps
 
-This approach makes Frank more robust to changes in the prompt template and eliminates the warnings when running the application.
-
-The solution is now complete and working as expected.
+[] Test the implementation to ensure it works correctly
+[] Consider adding more attributes to the OpenTelemetry spans for better observability
