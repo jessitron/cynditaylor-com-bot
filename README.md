@@ -1,6 +1,13 @@
 # Cyndi Taylor Website Bot
 
-This project implements an automated agent that helps Cyndi Taylor update her website (cynditaylor.com) without requiring technical knowledge.
+This project will implement an automated agent that helps Cyndi Taylor update her website (cynditaylor.com) without requiring technical knowledge.
+
+## Status
+
+Right now we are working on implementing the agent that will update the code.
+Someday that will be triggered by API call; right now, there's a main function that asks it to do a hard-coded thing.
+Someday that agent will use a real LLM; right now, it uses Frank, which replays a conversation history.
+Except, Frank doesn't work correctly yet. Or the recording of the conversation history is wrong. Still trying to get a run to go smoothly.
 
 ## Workflow
 
@@ -133,7 +140,7 @@ Run the tests:
 
 ```sh
 ./test
-```
+```./
 
 
 Alternatively, you can run the tests directly:
