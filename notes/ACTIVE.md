@@ -15,3 +15,16 @@ We are not implementing property-based tests yet. We are implementing only one t
 [] make a helper to compare conversations and print a nice diff when they don't match.
 
 ### Next step: make the test print a very clear result when it fails.
+
+The test is in tests/test_agent_conversation_logging.py
+
+## Plan for implementing conversation comparison helper
+
+1. Find the existing test that compares conversations (done)
+2. Implement a conversation comparison helper function that:
+   - Takes two conversations as input
+   - Compares them field by field
+   - Prints clear, readable diffs when they don't match
+   - Shows exactly what fields differ and their values
+3. Update the test to use this helper
+4. Run the test to verify the helper works correctly
