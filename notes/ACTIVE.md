@@ -10,6 +10,7 @@ We are not implementing property-based tests yet. We are implementing only one t
 [x] The agent should accept an LLM provider in the constructor
 [] Implement an in-memory version of the conversation logger
 [] Implement an in-memory version of the conversation reader, which accepts a conversation as an a constructor argument
+[] implement a fully-in-memory frank provider
 [] use these in a test with a hard-coded conversation, checking that the logged conversation matches the one passed in.
 
 ### Detailed plan:
