@@ -14,10 +14,10 @@ class LoggingConversationPartner(ConversationPartner):
     to any ConversationPartner implementation.
     """
 
-    def __init__(self, conversation_partner: ConversationPartner, output_dir: str = "conversation_history"):
+    def __init__(self, conversation_partner: ConversationPartner, conversation_logger=None, output_dir: str = "conversation_history"):
         self.conversation_partner = conversation_partner
-        self.conversation_logger = ConversationLogger(output_dir=output_dir)
-        logger.info(f"Initialized LoggingConversationPartner with logger: {self.conversation_logger.filename()}")
+        self.conversation_logger = conversation_logger or ConversationLogger(output_dir=output_dir)
+        logger.info(f"Initialized LoggingConversationPartner with logger: {self.conversation_logger.filename()}") # TODO: give the conversation logger a describe method instead, so it can say whatever is relevant
 
     def get_response_for_prompt(self, prompt: Prompt) -> Response:
         # Get the response from the wrapped conversation partner

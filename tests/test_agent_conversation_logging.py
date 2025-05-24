@@ -1,8 +1,9 @@
 import unittest
 import os
 from src.agent.agent import WebsiteAgent
-from src.llm.frank_llm.frank_provider import FrankProvider
+from src.llm.in_memory_frank_provider import InMemoryFrankProvider
 from src.llm.conversation_reader import ConversationReader
+from src.conversation.in_memory_logger import InMemoryConversationLogger
 
 
 class TestAgentConversationLogging(unittest.TestCase):
@@ -11,8 +12,7 @@ class TestAgentConversationLogging(unittest.TestCase):
         Test that verifies the agent logs a conversation that matches 
         the hard-coded conversation replayed by Frank LLM.
         
-        This test will fail until we implement InMemoryConversationLogger
-        and InMemoryConversationReader, but it shows the intended structure.
+        Uses in-memory components to avoid file dependencies.
         """
         # Load the test conversation that Frank will replay
         conversation_file = os.path.join(
@@ -22,30 +22,29 @@ class TestAgentConversationLogging(unittest.TestCase):
         )
         expected_conversation = ConversationReader(conversation_file).load_conversation()
         
-        # Create Frank LLM provider (will replay the test conversation)
-        frank_provider = FrankProvider()
+        # Create in-memory logger to capture what agent logs
+        in_memory_logger = InMemoryConversationLogger()
         
-        # TODO: Create in-memory logger to capture what agent logs
-        # in_memory_logger = InMemoryConversationLogger()
+        # Create in-memory Frank LLM provider with the logger
+        frank_provider = InMemoryFrankProvider(expected_conversation, in_memory_logger)
         
-        # TODO: Inject the logger into the agent
-        # agent = WebsiteAgent(frank_provider, website_dir="cynditaylor-com")
-        # agent.conversation_logger = in_memory_logger
+        # Create agent with Frank provider
+        agent = WebsiteAgent(frank_provider, website_dir="cynditaylor-com")
         
         # Execute the instruction (this should trigger Frank to replay the conversation)
         instruction = "Update the hero section on the homepage to include a new tagline: 'Bringing your memories to life through art'"
         
-        # TODO: Run the agent
-        # result = agent.execute_instruction(instruction)
+        # Run the agent
+        result = agent.execute_instruction(instruction)
         
-        # TODO: Get the logged conversation
-        # logged_conversation = in_memory_logger.get_conversation()
+        # Get the logged conversation
+        logged_conversation = in_memory_logger.get_conversation()
         
-        # TODO: Compare conversations
-        # self.assert_conversations_match(expected_conversation, logged_conversation)
+        # Compare conversations
+        self.assert_conversations_match(expected_conversation, logged_conversation)
         
-        # For now, just assert the test exists
-        self.assertTrue(True, "Test structure created, implementation pending")
+        # Verify we got a result
+        self.assertIsNotNone(result)
         
     def assert_conversations_match(self, expected, actual):
         """
