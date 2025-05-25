@@ -28,4 +28,10 @@ The helper successfully detected and clearly displayed a conversation ID mismatc
 
 COMPLETED: Removed conversation ID comparison from the test helper. 
 
-The test now shows the real issue: the actual prompt includes the full agent system prompt while the expected conversation only has the user instruction. The test is working correctly and showing clear diffs.
+The test now shows the real issue: the actual prompt includes the full agent system prompt while the expected conversation only has the user instruction. The test is working correctly and showing clear diffs.so
+
+### Next step: when the test fails, print a link to a trace
+
+In opentelemetry_conversation_partner.py, in finish_conversation, we add honeycomb_trace_url to the conversation metadata.
+
+In the test, whenever the conversation doesn't match, output that link to the console at the end of the output.
