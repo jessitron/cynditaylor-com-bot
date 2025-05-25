@@ -63,6 +63,10 @@ class InMemoryConversationLogger:
         date_str = self.conversation.timestamp.strftime("%Y%m%d_%H%M%S")
         return f"conversation_{date_str}_{self.conversation.conversation_id[:8]}.json"
 
+    def add_metadata(self, metadata: dict) -> None:
+        """Add metadata to the conversation."""
+        self.conversation.metadata.update(metadata)
+
     def save(self, metadata: Optional[dict] = None) -> str:
         """Return the filename for compatibility, but doesn't save files."""
         return self.filename()

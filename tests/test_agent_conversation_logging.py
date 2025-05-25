@@ -40,6 +40,9 @@ class TestAgentConversationLogging(unittest.TestCase):
         # Get the logged conversation
         logged_conversation = in_memory_logger.get_conversation()
         
+        # Debug: print the metadata
+        print(f"\nDEBUG: Logged conversation metadata: {logged_conversation.metadata}")
+        
         # Compare conversations
         self.assert_conversations_match(expected_conversation, logged_conversation)
         
