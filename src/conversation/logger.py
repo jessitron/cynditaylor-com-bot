@@ -34,6 +34,9 @@ class ConversationLogger:
             i += 1
 
         return current_prompt[i:].strip()
+    
+    def add_metadata(self, metadata: dict) -> None:
+        self.conversation.metadata.update(metadata)
 
     def log_exchange(self, prompt: Prompt, response: Response) -> None:
         """
@@ -70,13 +73,9 @@ class ConversationLogger:
         date_str = self.conversation.timestamp.strftime("%Y%m%d_%H%M%S")
         return f"conversation_{date_str}_{self.conversation.conversation_id[:8]}.json"
 
-    def save(self, metadata: Optional[dict] = None) -> str:
+    def save(self) -> str:
         # Convert the conversation to a dictionary
         conversation_dict = self.conversation.to_dict()
-
-        # Add metadata if it exists
-        if metadata:
-            conversation_dict["concluding_metadata"] = metadata
 
         file_path = self.get_path_to_log()
 

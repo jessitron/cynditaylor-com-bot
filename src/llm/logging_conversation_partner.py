@@ -36,8 +36,9 @@ class LoggingConversationPartner(ConversationPartner):
 
         # Get metadata from downstream conversation partner
         metadata = self.conversation_partner.finish_conversation()
+        self.conversation_logger.add_metadata(metadata)
 
-        output_file = self.conversation_logger.save(metadata)
+        output_file = self.conversation_logger.save()
 
         # print the full path of the file we saved to
         logger.info(f"Conversation saved to: {output_file}")
