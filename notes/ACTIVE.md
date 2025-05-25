@@ -35,3 +35,10 @@ The test now shows the real issue: the actual prompt includes the full agent sys
 In opentelemetry_conversation_partner.py, in finish_conversation, we add honeycomb_trace_url to the conversation metadata.
 
 In the test, whenever the conversation doesn't match, output that link to the console at the end of the output.
+
+COMPLETED: Implemented trace URL printing functionality:
+- Added metadata field to Conversation type to store trace URLs
+- Updated in-memory conversation logger to store metadata 
+- Modified test helper to print Honeycomb trace URL when conversations don't match
+- InMemoryFrankProvider adds a test trace URL that gets displayed on test failures
+- Test output now shows the trace URL at the end for debugging purposes

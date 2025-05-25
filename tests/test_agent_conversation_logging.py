@@ -51,24 +51,29 @@ class TestAgentConversationLogging(unittest.TestCase):
         Helper method to compare two conversations and provide detailed
         error messages when they don't match.
         """
-        # Compare conversation-level fields
-        if expected.version != actual.version:
-            self._print_conversation_diff("version", expected.version, actual.version)
-            self.fail(f"Version mismatch: expected '{expected.version}', got '{actual.version}'")
-        
-        
-        # Compare exchange count
-        if len(expected.exchanges) != len(actual.exchanges):
-            self._print_conversation_diff("exchange_count", len(expected.exchanges), len(actual.exchanges))
-            self.fail(f"Exchange count mismatch: expected {len(expected.exchanges)}, got {len(actual.exchanges)}")
-        
-        # Compare each exchange
-        for i, (expected_exchange, actual_exchange) in enumerate(zip(expected.exchanges, actual.exchanges)):
-            try:
-                self._assert_exchanges_match(expected_exchange, actual_exchange, i)
-            except AssertionError as e:
-                self._print_exchange_diff(expected_exchange, actual_exchange, i)
-                raise e
+        try:
+            # Compare conversation-level fields
+            if expected.version != actual.version:
+                self._print_conversation_diff("version", expected.version, actual.version)
+                self.fail(f"Version mismatch: expected '{expected.version}', got '{actual.version}'")
+            
+            
+            # Compare exchange count
+            if len(expected.exchanges) != len(actual.exchanges):
+                self._print_conversation_diff("exchange_count", len(expected.exchanges), len(actual.exchanges))
+                self.fail(f"Exchange count mismatch: expected {len(expected.exchanges)}, got {len(actual.exchanges)}")
+            
+            # Compare each exchange
+            for i, (expected_exchange, actual_exchange) in enumerate(zip(expected.exchanges, actual.exchanges)):
+                try:
+                    self._assert_exchanges_match(expected_exchange, actual_exchange, i)
+                except AssertionError as e:
+                    self._print_exchange_diff(expected_exchange, actual_exchange, i)
+                    raise e
+        except AssertionError as e:
+            # Print trace URL if available in actual conversation metadata
+            self._print_trace_url_if_available(actual)
+            raise e
 
     def _assert_exchanges_match(self, expected, actual, exchange_idx):
         """Compare two exchanges and raise detailed assertion errors."""
@@ -181,6 +186,28 @@ class TestAgentConversationLogging(unittest.TestCase):
         print(f"  Text: '{actual.response.response_text}'")
         print(f"  Tool Calls: {len(actual.response.tool_calls)} calls")
         print(f"{'='*60}")
+
+    def _print_trace_url_if_available(self, conversation):
+        """Print the Honeycomb trace URL if available in conversation metadata."""
+        if hasattr(conversation, 'metadata') and conversation.metadata:
+            trace_url = conversation.metadata.get('honeycomb_trace_url')
+            if trace_url:
+                print(f"\n{'='*60}")
+                print(f"TRACE URL FOR DEBUGGING:")
+                print(f"{'='*60}")
+                print(f"{trace_url}")
+                print(f"{'='*60}")
+        # Also check if there's a to_dict method and metadata there
+        elif hasattr(conversation, 'to_dict'):
+            conv_dict = conversation.to_dict()
+            if 'metadata' in conv_dict and conv_dict['metadata']:
+                trace_url = conv_dict['metadata'].get('honeycomb_trace_url')
+                if trace_url:
+                    print(f"\n{'='*60}")
+                    print(f"TRACE URL FOR DEBUGGING:")
+                    print(f"{'='*60}")
+                    print(f"{trace_url}")
+                    print(f"{'='*60}")
 
 
 if __name__ == '__main__':

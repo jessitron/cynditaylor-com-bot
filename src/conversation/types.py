@@ -54,10 +54,11 @@ class Conversation:
     conversation_id: str = ""
     timestamp: datetime.datetime = field(default_factory=datetime.datetime.now)
     exchanges: List[Exchange] = field(default_factory=list)
+    metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the conversation to a dictionary for serialization."""
-        return {
+        result = {
             "version": self.version,
             "conversation_id": self.conversation_id,
             "timestamp": self.timestamp.isoformat(),
@@ -96,6 +97,9 @@ class Conversation:
                 for exchange in self.exchanges
             ]
         }
+        if self.metadata:
+            result["metadata"] = self.metadata
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Conversation':
@@ -160,5 +164,6 @@ class Conversation:
             version=data.get("version", "1.0"),
             conversation_id=data.get("conversation_id", ""),
             timestamp=timestamp,
-            exchanges=exchanges
+            exchanges=exchanges,
+            metadata=data.get("metadata")
         )
