@@ -1,1 +1,6 @@
-python -m unittest discover tests
+#!/bin/bash
+
+source .env
+
+export OTEL_SERVICE_NAME="unit-tests"
+opentelemetry-instrument python -m unittest discover tests

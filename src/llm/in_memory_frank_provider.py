@@ -36,10 +36,4 @@ class InMemoryFrankProvider(LLMProvider):
             conversation_logger=self.conversation_logger
         )
         
-        # Add a test trace URL to the conversation logger after setting up the conversation partner
-        if self.conversation_logger and hasattr(self.conversation_logger, 'add_metadata'):
-            self.conversation_logger.add_metadata({
-                "honeycomb_trace_url": "https://ui.honeycomb.io/test-team/environments/test-env/trace?trace_id=test123&span_id=span456&trace_start_ts=1234567890&trace_end_ts=1234567900"
-            })
-
         return conversation_partner
