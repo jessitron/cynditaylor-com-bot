@@ -10,4 +10,4 @@ Run the app: ./run
  - When you make changes to code, make commits after each small conceptual change. Tag the commit messages '-- Claude'
 
  # cautions
- When I say "gs" that means I typed in the wrong window. Ignore me.
+ When I say "gs" that means I typed in the wrong window. do nothing, just say "wrong window"
