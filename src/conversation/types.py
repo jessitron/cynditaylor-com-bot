@@ -98,6 +98,7 @@ class Conversation:
                 for exchange in self.exchanges
             ]
         }
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Conversation':
