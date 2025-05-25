@@ -189,25 +189,17 @@ class TestAgentConversationLogging(unittest.TestCase):
 
     def _print_trace_url_if_available(self, conversation):
         """Print the Honeycomb trace URL if available in conversation metadata."""
-        if hasattr(conversation, 'metadata') and conversation.metadata:
-            trace_url = conversation.metadata.get('honeycomb_trace_url')
-            if trace_url:
-                print(f"\n{'='*60}")
-                print(f"TRACE URL FOR DEBUGGING:")
-                print(f"{'='*60}")
-                print(f"{trace_url}")
-                print(f"{'='*60}")
-        # Also check if there's a to_dict method and metadata there
-        elif hasattr(conversation, 'to_dict'):
-            conv_dict = conversation.to_dict()
-            if 'metadata' in conv_dict and conv_dict['metadata']:
-                trace_url = conv_dict['metadata'].get('honeycomb_trace_url')
-                if trace_url:
-                    print(f"\n{'='*60}")
-                    print(f"TRACE URL FOR DEBUGGING:")
-                    print(f"{'='*60}")
-                    print(f"{trace_url}")
-                    print(f"{'='*60}")
+        trace_url = conversation.metadata.get('honeycomb_trace_url')
+        if trace_url:
+            print(f"\n{'='*60}")
+            print(f"TRACE URL FOR DEBUGGING:")
+            print(f"{'='*60}")
+            print(f"{trace_url}")
+            print(f"{'='*60}")
+        else:
+            print(f"\n{'='*60}")
+            print(f"NO TRACE URL AVAILABLE")
+            print(f"{'='*60}")
 
 
 if __name__ == '__main__':
