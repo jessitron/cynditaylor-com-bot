@@ -3,6 +3,11 @@
 set -e
 set -x
 
+# if .be exists, source it
+if [ -f .be ]; then
+    source .be
+fi
+
 source .env
 
 echo $OTEL_EXPORTER_OTLP_HEADERS

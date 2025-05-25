@@ -1,6 +1,4 @@
 # bash
-Set up the terminal: `source .be`
-
 Run tests: ./test
 Run the app: ./run
 

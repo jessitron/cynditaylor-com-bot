@@ -4,7 +4,9 @@
       "Bash(./test)",
       "Bash(pip install:*)",
       "Bash(git add:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(./run)",
+      "Bash(source:*)"
     ],
     "deny": []
   }

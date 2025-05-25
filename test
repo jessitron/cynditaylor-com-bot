@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# if .be exists, source it
+if [ -f .be ]; then
+    source .be
+fi
+
 source .env
 
 export OTEL_SERVICE_NAME="unit-tests"
