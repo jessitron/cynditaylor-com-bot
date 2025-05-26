@@ -16,6 +16,7 @@ class TestMinimalConvo(unittest.TestCase):
             version="1.0",
             conversation_id="test-conversation-id",
             timestamp="2023-06-15T14:30:00Z",
+            system_prompt="You are an agent that answers riddles.",
             exchanges=[
                 Exchange(
                     id="exchange-1",
@@ -67,7 +68,6 @@ class TestMinimalConvo(unittest.TestCase):
             if expected.version != actual.version:
                 self._print_conversation_diff("version", expected.version, actual.version)
                 self.fail(f"Version mismatch: expected '{expected.version}', got '{actual.version}'")
-            
             
             # Compare exchange count
             if len(expected.exchanges) != len(actual.exchanges):

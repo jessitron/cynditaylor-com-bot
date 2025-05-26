@@ -6,8 +6,9 @@ from src.conversation.types import Conversation, Exchange, Prompt, Response
 
 
 class InMemoryConversationLogger:
-    def __init__(self):
+    def __init__(self, system_prompt: str = ""):
         self.conversation = Conversation(
+            system_prompt=system_prompt,
             conversation_id=str(uuid.uuid4()),
             timestamp=datetime.datetime.now(),
             exchanges=[]

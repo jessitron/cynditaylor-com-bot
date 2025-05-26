@@ -91,21 +91,23 @@ class WebsiteAgent:
     def execute_instruction(self, instruction: str) -> str:
         span = trace.get_current_span()
         span.set_attribute("app.instruction", instruction)
+        
+        # Define the system prompt separately
+        system_prompt = """You are an agent that modifies code in the cynditaylor-com website.
+You have access to tools that allow you to list files, read and write file contents, and commit changes to the repository."""
+        
         llm = self.llm_provider.start_conversation()
         llm.record_metadata("instruction", instruction)
+        llm.record_metadata("system_prompt", system_prompt)
 
         try:
-            # Create the initial prompt
-            prompt = f"""
-            You are an agent that modifies code in the cynditaylor-com website.
-            You have access to tools that allow you to list files, read and write file contents, and commit changes to the repository.
 
-            INSTRUCTION:
-            {instruction}
+            # Create the initial prompt without the system prompt part
+            prompt = f"""INSTRUCTION:
+{instruction}
 
-            Please analyze the instruction and use the available tools to make the necessary changes.
-            When you're done, provide a summary of what you did.
-            """
+Please analyze the instruction and use the available tools to make the necessary changes.
+When you're done, provide a summary of what you did."""
 
             # Start the conversation loop
             max_iterations = 10

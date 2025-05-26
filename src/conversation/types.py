@@ -50,6 +50,7 @@ class Exchange:
 @dataclass
 class Conversation:
     """A complete conversation consisting of multiple exchanges."""
+    system_prompt: str
     version: str = "1.0"
     conversation_id: str = ""
     timestamp: datetime.datetime = field(default_factory=datetime.datetime.now)
@@ -59,6 +60,7 @@ class Conversation:
     def to_dict(self) -> Dict[str, Any]:
         """Convert the conversation to a dictionary for serialization."""
         result = {
+            "system_prompt": self.system_prompt,
             "version": self.version,
             "conversation_id": self.conversation_id,
             "timestamp": self.timestamp.isoformat(),
@@ -160,6 +162,7 @@ class Conversation:
 
         # Create the conversation
         return cls(
+            system_prompt=data.get("system_prompt", ""),
             version=data.get("version", "1.0"),
             conversation_id=data.get("conversation_id", ""),
             timestamp=timestamp,

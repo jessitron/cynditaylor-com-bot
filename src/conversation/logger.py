@@ -8,9 +8,10 @@ from src.conversation.types import Conversation, Exchange, Prompt, Response
 
 
 class ConversationLogger:
-    def __init__(self, output_dir: str = "conversation_history"):
+    def __init__(self, output_dir: str = "conversation_history", system_prompt: str = ""):
         self.output_dir = output_dir
         self.conversation = Conversation(
+            system_prompt=system_prompt,
             conversation_id=str(uuid.uuid4()),
             timestamp=datetime.datetime.now(),
             exchanges=[]
