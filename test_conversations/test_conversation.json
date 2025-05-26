@@ -30,6 +30,7 @@
       },
       "response": {
         "type": "tool_requests",
+        "text": "I'll help you update the hero section with a new tagline. First, I need to see what files are available in the website directory.",
         "requests": [
           {
             "tool_name": "list_files",
@@ -59,6 +60,7 @@
       },
       "response": {
         "type": "tool_requests",
+        "text": "Now I'll read the content of the index.html file to locate the hero section and update the tagline.",
         "requests": [
           {
             "tool_name": "read_file",
@@ -86,6 +88,7 @@
       },
       "response": {
         "type": "tool_requests",
+        "text": "I'll now update the tagline in the hero section. I'll use the write_file tool to modify the index.html file with the new tagline.",
         "requests": [
           {
             "tool_name": "write_file",

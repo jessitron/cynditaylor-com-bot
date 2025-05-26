@@ -29,8 +29,9 @@ class ToolUse:
 
 @dataclass
 class ToolUseRequests:
-    """A collection of tool use requests."""
+    """A collection of tool use requests with optional accompanying text."""
     requests: List[ToolUse] = field(default_factory=list)
+    text: Optional[str] = None
 
 
 @dataclass
@@ -92,6 +93,8 @@ class Conversation:
                     "type": "tool_requests",
                     "requests": [{"tool_name": r.tool_name, "id": r.id, "parameters": r.parameters} for r in exchange.response.requests]
                 }
+                if exchange.response.text:
+                    response_data["text"] = exchange.response.text
             
             exchanges_data.append({
                 "id": exchange.id,
@@ -156,7 +159,10 @@ class Conversation:
                         id=request_data.get("id", ""),
                         parameters=request_data.get("parameters", {})
                     ))
-                response = ToolUseRequests(requests=requests)
+                response = ToolUseRequests(
+                    requests=requests,
+                    text=response_data.get("text")
+                )
             else:
                 # Default to empty final response if type is unknown
                 response = FinalResponse(text="")

@@ -38,6 +38,8 @@ class OpenTelemetryConversationPartnerDecorator(ConversationPartner):
             elif isinstance(response, ToolUseRequests):
                 span.set_attribute("app.llm.response.type", "tool_requests")
                 span.set_attribute("app.llm.response.tool_requests_count", len(response.requests))
+                if response.text:
+                    span.set_attribute("app.llm.response.text", response.text[:10000])  # Truncate if too long
 
             return response
 
