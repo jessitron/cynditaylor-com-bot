@@ -1,12 +1,12 @@
 import os
 import json
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Union
 
 from src.llm.frank_llm.frank_provider import FrankProvider
 from src.agent.tools.file_tools import ListFilesTool, ReadFileTool, WriteFileTool
 from src.agent.tools.git_tools import CommitChangesTool, PushChangesTool
-from src.conversation.types import Prompt, Response, ToolCall, PromptMetadata
+from src.conversation.types import TextPrompt, ToolUseResults, FinalResponse, ToolUseRequests, ToolUse, ToolUseResult, Tool
 
 from opentelemetry import trace
 
@@ -100,94 +100,51 @@ You have access to tools that allow you to list files, read and write file conte
         llm.record_metadata("instruction", instruction)
 
         try:
-
-            prompt = instruction
+            # Start with a text prompt
+            current_prompt: Union[TextPrompt, ToolUseResults] = TextPrompt(text=instruction)
+            
             # Start the conversation loop
             max_iterations = 10
-            conversation_history = []
-            # Initialize kwargs for tracking tool calls
-            kwargs = {"prompt_tool_calls": []}
-
-            # Add the initial prompt to the conversation history
-            conversation_history.append({"role": "user", "content": prompt})
 
             for i in range(max_iterations):
                 with tracer.start_as_current_span(f"Iteration {i+1}") as span:
-                    # Generate a response using the LLM
-                    span.set_attribute("app.llm.prompt", prompt)
                     span.set_attribute("app.iteration", i + 1)
-
-                    # Get any prompt tool calls from previous iterations
-                    prompt_tool_calls = kwargs.get("prompt_tool_calls", [])
-
-                    # Create tool call objects
-                    tool_call_objects = []
-                    for tc in prompt_tool_calls:
-                        tool_call = ToolCall(
-                            tool_name=tc.get("tool_name", ""),
-                            parameters=tc.get("parameters", {}),
-                            result=tc.get("result")
-                        )
-                        tool_call_objects.append(tool_call)
-
-                    # Create a Prompt object
-                    prompt_obj = Prompt(
-                        prompt_text=prompt,
-                        metadata=PromptMetadata(),
-                        tool_calls=tool_call_objects
-                    )
-
-                    # Call the LLM with the prompt object
-                    response = llm.get_response_for_prompt(prompt_obj)
-                    span.set_attribute("app.llm.response", response.response_text)
-
-                    # Add the response to the conversation history
-                    conversation_history.append({"role": "assistant", "content": response.response_text})
-
-                    # Check if the response contains tool calls
-                    if response.tool_calls:
-                        # Get the first tool call
-                        tool_call = response.tool_calls[0]
-
-                        # Extract tool name and parameters
-                        tool_name = tool_call.tool_name
-                        tool_args = tool_call.parameters
-
-                        tool_result = self._execute_tool_by_name(tool_name, tool_args)
-
-                        # Add the tool result to the conversation history
-                        conversation_history.append({
-                            "role": "tool",
-                            "name": tool_name,
-                            "content": tool_result
-                        })
-
-                        # Create a tool call object for the next prompt
-                        tool_call_obj = {
-                            "tool_name": tool_name,
-                            "parameters": tool_args,
-                            "result": tool_result
-                        }
-
-                        # Add the tool call to the prompt_tool_calls list for the next iteration
-                        prompt_tool_calls.append(tool_call_obj)
-
-                        # Update kwargs for the next iteration
-                        kwargs["prompt_tool_calls"] = prompt_tool_calls
-
-                        # Update the prompt with the tool result
-                        prompt = self._update_prompt_with_tool_result(
-                            prompt,
-                            tool_name,
-                            tool_args,
-                            tool_result
-                        )
+                    
+                    if isinstance(current_prompt, TextPrompt):
+                        span.set_attribute("app.llm.prompt", current_prompt.text)
+                    
+                    # Call the LLM with the current prompt
+                    response = llm.get_response_for_prompt(current_prompt)
+                    
+                    if isinstance(response, FinalResponse):
+                        # Got a final response, return it
+                        span.set_attribute("app.llm.response", response.text)
+                        return response.text
+                    elif isinstance(response, ToolUseRequests):
+                        # Got tool use requests, execute them
+                        span.set_attribute("app.llm.tool_requests_count", len(response.requests))
+                        
+                        # Execute all tool requests and collect results
+                        tool_results = []
+                        for tool_request in response.requests:
+                            tool_name = tool_request.tool_name
+                            tool_args = tool_request.parameters
+                            
+                            tool_result = self._execute_tool_by_name(tool_name, tool_args)
+                            
+                            tool_results.append(ToolUseResult(
+                                id=tool_request.id,
+                                result=tool_result
+                            ))
+                        
+                        # Create the next prompt with tool results
+                        current_prompt = ToolUseResults(results=tool_results)
                     else:
-                        # No tool call, return the final response text
-                        return response.response_text
+                        # Unexpected response type
+                        return f"Unexpected response type: {type(response)}"
 
-            # If we reach the maximum number of iterations, return the last response text
-            return response.response_text
+            # If we reach the maximum number of iterations, return a message
+            return "Maximum iterations reached without a final response"
         finally:
             # Always call finish_conversation to ensure proper cleanup
             llm.finish_conversation()
@@ -195,28 +152,3 @@ You have access to tools that allow you to list files, read and write file conte
     def _execute_tool_by_name(self, tool_name: str, tool_args: Dict[str, Any]) -> Dict[str, Any]:
         return self._execute_tool(tool_name, tool_args)
 
-    # The _extract_tool_call method has been removed as tool calls now come directly in the Response object
-
-    def _update_prompt_with_tool_result(self, prompt: str, tool_name: str, tool_args: Dict[str, Any], tool_result: Dict[str, Any]) -> str:
-        import json
-
-        # Add the tool call and result to the prompt
-        tool_call_str = json.dumps({"name": tool_name, "arguments": tool_args}, indent=2)
-        tool_result_str = json.dumps(tool_result, indent=2)
-
-        updated_prompt = f"""{prompt}
-
-Tool call:
-```tool
-{tool_call_str}
-```
-
-Tool result:
-```
-{tool_result_str}
-```
-
-Please continue with the instruction based on this result.
-"""
-
-        return updated_prompt

@@ -1,11 +1,12 @@
 import logging
 import os
 import time
+from typing import Union
 from opentelemetry import trace
 import requests
 
 from src.llm.conversation_partner import ConversationPartner
-from src.conversation.types import Prompt, Response
+from src.conversation.types import TextPrompt, ToolUseResults, FinalResponse, ToolUseRequests
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer("opentelemetry-conversation-partner")
@@ -16,29 +17,27 @@ class OpenTelemetryConversationPartnerDecorator(ConversationPartner):
         self.conversation_partner = conversation_partner
         self.trace_start_time = int(time.time())
 
-    def get_response_for_prompt(self, prompt: Prompt) -> Response:
+    def get_response_for_prompt(self, prompt: Union[TextPrompt, ToolUseResults]) -> Union[FinalResponse, ToolUseRequests]:
         # Create a span for this exchange
         with tracer.start_as_current_span("LLM Exchange") as span:
             # Add attributes to the span for the prompt
-            span.set_attribute("app.llm.prompt.text", prompt.prompt_text[:10000])  # Truncate if too long
-            span.set_attribute("app.llm.prompt.temperature", prompt.metadata.temperature)
-            span.set_attribute("app.llm.prompt.max_tokens", prompt.metadata.max_tokens)
-            if prompt.metadata.model:
-                span.set_attribute("app.llm.model", prompt.metadata.model)
-
-            # Add attributes for tool calls in the prompt if any
-            if prompt.tool_calls:
-                span.set_attribute("app.llm.prompt.tool_calls_count", len(prompt.tool_calls))
+            if isinstance(prompt, TextPrompt):
+                span.set_attribute("app.llm.prompt.text", prompt.text[:10000])  # Truncate if too long
+                span.set_attribute("app.llm.prompt.type", "text")
+            elif isinstance(prompt, ToolUseResults):
+                span.set_attribute("app.llm.prompt.type", "tool_results")
+                span.set_attribute("app.llm.prompt.tool_results_count", len(prompt.results))
 
             # Get the response from the wrapped conversation partner
             response = self.conversation_partner.get_response_for_prompt(prompt)
 
             # Add attributes to the span for the response
-            span.set_attribute("app.llm.response.text", response.response_text[:10000])  # Truncate if too long")
-
-            # Add attributes for tool calls in the response if any
-            if response.tool_calls:
-                span.set_attribute("app.llm.response.tool_calls_count", len(response.tool_calls))
+            if isinstance(response, FinalResponse):
+                span.set_attribute("app.llm.response.text", response.text[:10000])  # Truncate if too long
+                span.set_attribute("app.llm.response.type", "final")
+            elif isinstance(response, ToolUseRequests):
+                span.set_attribute("app.llm.response.type", "tool_requests")
+                span.set_attribute("app.llm.response.tool_requests_count", len(response.requests))
 
             return response
 

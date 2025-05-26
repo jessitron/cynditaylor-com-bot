@@ -128,30 +128,38 @@ class Conversation:
         for exchange_data in data.get("exchanges", []):
             # Create the prompt
             prompt_data = exchange_data.get("prompt", {})
+            prompt = None
             if prompt_data.get("type") == "text":
-                prompt = TextPrompt(text=prompt_data["text"])
+                prompt = TextPrompt(text=prompt_data.get("text", ""))
             elif prompt_data.get("type") == "tool_results":
                 results = []
                 for result_data in prompt_data.get("results", []):
                     results.append(ToolUseResult(
-                        id=result_data["id"],
-                        result=result_data["result"]
+                        id=result_data.get("id", ""),
+                        result=result_data.get("result")
                     ))
                 prompt = ToolUseResults(results=results)
+            else:
+                # Default to empty text prompt if type is unknown
+                prompt = TextPrompt(text="")
 
             # Create the response
             response_data = exchange_data.get("response", {})
+            response = None
             if response_data.get("type") == "final":
-                response = FinalResponse(text=response_data["text"])
+                response = FinalResponse(text=response_data.get("text", ""))
             elif response_data.get("type") == "tool_requests":
                 requests = []
                 for request_data in response_data.get("requests", []):
                     requests.append(ToolUse(
-                        tool_name=request_data["tool_name"],
-                        id=request_data["id"],
-                        parameters=request_data["parameters"]
+                        tool_name=request_data.get("tool_name", ""),
+                        id=request_data.get("id", ""),
+                        parameters=request_data.get("parameters", {})
                     ))
                 response = ToolUseRequests(requests=requests)
+            else:
+                # Default to empty final response if type is unknown
+                response = FinalResponse(text="")
 
             # Create the exchange
             exchange = Exchange(

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Union
 
-from src.conversation.types import Prompt, Response
+from src.conversation.types import TextPrompt, ToolUseResults, FinalResponse, ToolUseRequests
 
 class ConversationPartner(ABC):
     """
@@ -9,7 +9,7 @@ class ConversationPartner(ABC):
     """
 
     @abstractmethod
-    def get_response_for_prompt(self, prompt: Prompt) -> Response:
+    def get_response_for_prompt(self, prompt: Union[TextPrompt, ToolUseResults]) -> Union[FinalResponse, ToolUseRequests]:
         pass
 
     @abstractmethod

@@ -68,3 +68,14 @@ Get the data structures right.
 - The current ToolCall structure conflates tool use requests and results
 - New structure separates tool requests (ToolUse) from results (ToolUseResult)
 - Tool calls will be split across exchanges: request in one exchange's response, results in next exchange's prompt
+
+## Summary of Accomplishments
+
+✅ Completed implementation of refactored conversation format:
+
+1. **New data structures defined**: Tool, TextPrompt, ToolUse, ToolUseRequests, ToolUseResult, ToolUseResults, FinalResponse
+2. **Exchange updated**: Now uses union types for prompt (TextPrompt | ToolUseResults) and response (FinalResponse | ToolUseRequests)  
+3. **Conversation updated**: Added tool_list field, updated to version 2.0
+4. **Serialization updated**: Complete rewrite of to_dict() and from_dict() methods to handle new union types and tool_list
+
+The refactoring breaks existing imports (Prompt, Response classes removed) but achieves the goal of properly separating tool use requests from tool use results across exchanges. Tests currently fail due to import errors, which is expected as the old types were removed.

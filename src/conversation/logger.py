@@ -2,19 +2,20 @@ import os
 import json
 import uuid
 import datetime
-from typing import Optional
+from typing import Optional, Union, List
 
-from src.conversation.types import Conversation, Exchange, Prompt, Response
+from src.conversation.types import Conversation, Exchange, Tool, TextPrompt, ToolUseResults, FinalResponse, ToolUseRequests
 
 
 class ConversationLogger:
-    def __init__(self, output_dir: str = "conversation_history", system_prompt: str = ""):
+    def __init__(self, output_dir: str = "conversation_history", system_prompt: str = "", tools: List[Tool] = None):
         self.output_dir = output_dir
         self.conversation = Conversation(
+            tool_list=tools or [],
+            exchanges=[],
             system_prompt=system_prompt,
             conversation_id=str(uuid.uuid4()),
-            timestamp=datetime.datetime.now(),
-            exchanges=[]
+            timestamp=datetime.datetime.now()
         )
         self.previous_prompt_text = None
 
@@ -39,17 +40,21 @@ class ConversationLogger:
     def add_metadata(self, metadata: dict) -> None:
         self.conversation.metadata.update(metadata)
 
-    def log_exchange(self, prompt: Prompt, response: Response) -> None:
+    def log_exchange(self, prompt: Union[TextPrompt, ToolUseResults], response: Union[FinalResponse, ToolUseRequests]) -> None:
         """
         Log an exchange between a user and an LLM.
 
         Args:
-            prompt: The Prompt object sent to the LLM
-            response: The Response object received from the LLM
+            prompt: The prompt sent to the LLM (TextPrompt or ToolUseResults)
+            response: The response received from the LLM (FinalResponse or ToolUseRequests)
         """
-        # Update the new_text field if it's not already set
-        if not prompt.new_text and self.previous_prompt_text:
-            prompt.new_text = self.find_new_portion(prompt.prompt_text, self.previous_prompt_text)
+        # Track text for finding new portions (only applies to TextPrompt)
+        current_text = None
+        if isinstance(prompt, TextPrompt):
+            current_text = prompt.text
+            if self.previous_prompt_text:
+                # We could enhance TextPrompt to track new portions if needed
+                pass
 
         # Create the exchange
         exchange_id = f"exchange-{len(self.conversation.exchanges) + 1}"
@@ -62,8 +67,9 @@ class ConversationLogger:
         # Add the exchange to the conversation
         self.conversation.exchanges.append(exchange)
 
-        # Update the previous prompt
-        self.previous_prompt_text = prompt.prompt_text
+        # Update the previous prompt text
+        if current_text:
+            self.previous_prompt_text = current_text
 
         # Save the conversation after each exchange
         self.save()

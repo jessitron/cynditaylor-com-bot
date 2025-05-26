@@ -1,10 +1,11 @@
 import os
 import logging
+from typing import Union
 
 from opentelemetry import trace
 
 from src.llm.conversation_partner import ConversationPartner
-from src.conversation.types import Exchange, ToolCall, Prompt, Response
+from src.conversation.types import Exchange, TextPrompt, ToolUseResults, FinalResponse, ToolUseRequests
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ class Frank(ConversationPartner):
         self.exchanges = exchanges
         self.index = 0
 
-    def get_response_for_prompt(self, prompt: Prompt, **_) -> Response:
+    def get_response_for_prompt(self, prompt: Union[TextPrompt, ToolUseResults], **_) -> Union[FinalResponse, ToolUseRequests]:
         if self.index >= len(self.exchanges):
             raise ValueError("End of conversation reached, no more exchanges available")
 
@@ -24,17 +25,21 @@ class Frank(ConversationPartner):
         span.set_attribute("app.frank.index", self.index)
 
         current_exchange = self.exchanges[self.index]
-        if current_exchange.prompt.prompt_text != prompt.prompt_text:
-            logger.warning(f"Prompt mismatch at index {self.index}",
-                          extra={"prompt.expected": current_exchange.prompt.prompt_text,
-                                "prompt.received": prompt.prompt_text})
+        
+        # Validate prompt matches expected type and content
+        if isinstance(prompt, TextPrompt) and isinstance(current_exchange.prompt, TextPrompt):
+            if current_exchange.prompt.text != prompt.text:
+                logger.warning(f"Text prompt mismatch at index {self.index}",
+                              extra={"prompt.expected": current_exchange.prompt.text,
+                                    "prompt.received": prompt.text})
+        elif isinstance(prompt, ToolUseResults) and isinstance(current_exchange.prompt, ToolUseResults):
+            # Could add validation for tool results if needed
+            pass
+        else:
+            logger.warning(f"Prompt type mismatch at index {self.index}: expected {type(current_exchange.prompt)}, got {type(prompt)}")
 
-        # Get the response from the current exchange
-        response = Response(
-            response_text=current_exchange.response.response_text,
-            tool_calls=current_exchange.response.tool_calls
-        )
-
+        # Return the response from the current exchange
+        response = current_exchange.response
         self.index += 1
         return response
 

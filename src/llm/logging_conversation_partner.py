@@ -1,9 +1,10 @@
 import logging
 import os
+from typing import Union
 
 from src.llm.conversation_partner import ConversationPartner
 from src.conversation.logger import ConversationLogger
-from src.conversation.types import Prompt, Response
+from src.conversation.types import TextPrompt, ToolUseResults, FinalResponse, ToolUseRequests, Tool
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +15,12 @@ class LoggingConversationPartner(ConversationPartner):
     to any ConversationPartner implementation.
     """
 
-    def __init__(self, conversation_partner: ConversationPartner, conversation_logger=None, output_dir: str = "conversation_history", system_prompt: str = ""):
+    def __init__(self, conversation_partner: ConversationPartner, conversation_logger=None, output_dir: str = "conversation_history", system_prompt: str = "", tools=None):
         self.conversation_partner = conversation_partner
-        self.conversation_logger = conversation_logger or ConversationLogger(output_dir=output_dir, system_prompt=system_prompt)
+        self.conversation_logger = conversation_logger or ConversationLogger(output_dir=output_dir, system_prompt=system_prompt, tools=tools or [])
         logger.info(f"Initialized LoggingConversationPartner with logger: {self.conversation_logger.filename()}") # TODO: give the conversation logger a describe method instead, so it can say whatever is relevant
 
-    def get_response_for_prompt(self, prompt: Prompt) -> Response:
+    def get_response_for_prompt(self, prompt: Union[TextPrompt, ToolUseResults]) -> Union[FinalResponse, ToolUseRequests]:
         # Get the response from the wrapped conversation partner
         response = self.conversation_partner.get_response_for_prompt(prompt)
 
