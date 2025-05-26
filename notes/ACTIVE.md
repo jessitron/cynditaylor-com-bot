@@ -62,3 +62,8 @@ Leave the tests alone for now
 
 The implementation successfully separates system prompts from exchange data, making tests easier to maintain by removing hard-coded system prompt expectations.
 
+## next: pass system_prompt into initialization
+
+I reverted some dumb stuff
+
+Now, pass the system prompt in to start_conversation instead

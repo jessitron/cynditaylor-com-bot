@@ -32,11 +32,7 @@ class LoggingConversationPartner(ConversationPartner):
         return f"Logging-{self.conversation_partner.get_name()}"
 
     def record_metadata(self, key: str, value) -> None:
-        """Record metadata for this conversation."""
-        # If the system_prompt is being set, update the conversation's system_prompt
-        if key == "system_prompt":
-            self.conversation_logger.conversation.system_prompt = value
-        self.conversation_logger.add_metadata({key: value})
+       self.conversation_logger.add_metadata({key: value})
 
     def finish_conversation(self) -> dict:
         # Save the final conversation state
