@@ -8,4 +8,10 @@ Instead, make the file_read and file_write and file_list tools work in that webs
 
 ## Plan
 
-Put the plan here, first. Do not implement yet.
+1. Remove the path adjustment logic from agent.py lines 75-81 and 90-104
+2. Modify file tools to accept a `base_directory` parameter in their constructor
+3. Update ListFilesTool, ReadFileTool, and WriteFileTool to work relative to base_directory
+4. Update agent.py to pass website_dir to file tools during initialization
+5. Ensure all file operations are automatically scoped to the website directory
+
+This will move the directory scoping responsibility from the agent to the tools themselves, making the code cleaner and more logical.
