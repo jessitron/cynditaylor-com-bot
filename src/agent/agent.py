@@ -101,13 +101,7 @@ You have access to tools that allow you to list files, read and write file conte
 
         try:
 
-            # Create the initial prompt without the system prompt part
-            prompt = f"""INSTRUCTION:
-{instruction}
-
-Please analyze the instruction and use the available tools to make the necessary changes.
-When you're done, provide a summary of what you did."""
-
+            prompt = instruction
             # Start the conversation loop
             max_iterations = 10
             conversation_history = []

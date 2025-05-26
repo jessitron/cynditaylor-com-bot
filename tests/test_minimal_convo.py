@@ -37,7 +37,7 @@ class TestMinimalConvo(unittest.TestCase):
         agent = WebsiteAgent(frank_provider, website_dir="cynditaylor-com")
         
         # Execute the instruction (this should trigger Frank to replay the conversation)
-        instruction = "answer the riddle"
+        instruction = "Why did the monkey cross the road?"
         
         # Run the agent
         result = agent.execute_instruction(instruction)
