@@ -2,3 +2,4 @@ cynditaylor-com/
 .be
 __pycache__/
 chat_logs/
+conversation_history/
