@@ -1,87 +1,43 @@
-# Active work for the agent right now
+# Separate tool list, tool use and tool result
 
-I want to make it easier to test the exchanges. Right now, the system prompt gets crammed into the prompt text, so any test has to hard-code the expectation of it.
+We are going to refactor the Conversation format.
 
-Let's break out the system prompt from the exchanges, and make it a property of the conversation instead.
+Eliding the parts that aren't changing, the conversation will be more like
 
-## Plan:
+Conversation(
+    tool_list: List[Tool],
+    exchanges: List[Exchange]
+)
 
-### Current Problem
-- System prompts are embedded in `prompt_text` field of each exchange
-- Tests must hard-code expectations including the full system prompt text
-- This makes tests brittle and hard to maintain
+The tool list is at the conversation level because it is something that is negotiated at the beginning of the conversation.
 
-### Solution: Separate System Prompt from Exchange Data
+Exchange(
+    prompt: TextPrompt OR ToolUseResults,
+    response: FinalResponse OR ToolUseRequests,
+)
 
-1. **Add `system_prompt` field to Conversation class**
-   - Add `system_prompt: str` to Conversation dataclass. It is required.
-   - Update `to_dict()` and `from_dict()` methods to handle system_prompt
+TextPrompt has only a text field
 
-3. **Update conversation partners to use system_prompt**
-   - Modify agent.py to set system_prompt on conversation
-   - Update LLM providers to combine system_prompt + prompt_text when making calls
-   - Frank can ignore the system prompt, no changes needed
+ToolUseRequests is a list of ToolUse
 
-5. **Update logging and serialization**
-   - Ensure ConversationLogger handles system_prompt field
-   - Update visualization tools to display system_prompt separately
+ToolUse(
+    tool_name: str,
+    id: str,
+    parameters: Dict[str, Any],
+)
 
-### Files to modify:
-- `/workspaces/cynditaylor-com-bot/src/conversation/types.py` - Add system_prompt to Conversation
-- `/workspaces/cynditaylor-com-bot/src/agent/agent.py` - Set system_prompt when creating conversation
+ToolUseResults is a list of ToolUseResult
 
-Leave the tests alone for now
+ToolUseResult(
+    id: str,
+    result: Any,
+)
 
-## Implementation Summary - Completed:
+FinalResponse has only a text field
 
-✅ **Added `system_prompt` field to Conversation class**
-   - Added required `system_prompt: str` parameter to Conversation dataclass in `src/conversation/types.py`
-   - Updated `to_dict()` method to serialize system_prompt
-   - Updated `from_dict()` method to deserialize system_prompt with default fallback
+## Implementation Plan
 
-✅ **Updated agent.py to set system_prompt on conversation**
-   - Modified `execute_instruction()` in `src/agent/agent.py` to separate system prompt from user instruction
-   - System prompt is now passed as metadata to the conversation partner
-   - LoggingConversationPartner updated to set system_prompt on conversation when metadata is recorded
+Do not include tests in this plan. I will worry about those later. 
+Get the data structures right.
 
-✅ **Updated conversation loggers to handle system_prompt**
-   - Modified ConversationLogger in `src/conversation/logger.py` to accept system_prompt parameter
-   - Updated InMemoryConversationLogger in `src/conversation/in_memory_logger.py` to accept system_prompt
-   - LoggingConversationPartner updated to detect system_prompt metadata and set it on conversation
-
-✅ **Updated test data**
-   - Modified `test_conversations/test_conversation.json` to include system_prompt field
-   - Removed system prompt text from individual exchange prompt_text fields
-   - System prompt is now separated from exchange data as intended
-
-**Verification:**
-- Tests show that system_prompt is properly captured in conversation metadata
-- System prompt is separated from exchange prompt text
-- Conversations can be serialized/deserialized with system_prompt field
-- Agent properly sets system_prompt when starting conversations
-
-The implementation successfully separates system prompts from exchange data, making tests easier to maintain by removing hard-coded system prompt expectations.
-
-## ✅ Completed: pass system_prompt into initialization
-
-**Updated provider interface:**
-- Modified `LLMProvider.start_conversation()` to accept `system_prompt: str` parameter
-- Updated `FrankProvider` and `InMemoryFrankProvider` to accept and pass through system_prompt
-- Updated `LoggingConversationPartner` to accept system_prompt and pass to ConversationLogger
-
-**Updated agent integration:**
-- Modified agent.py to pass system_prompt directly to `start_conversation()`
-- Removed metadata-based system_prompt handling
-- System prompt is now initialized at conversation creation rather than via metadata
-
-**Test data consistency:**
-- Updated test_conversation.json to include system_prompt field
-- Cleaned up embedded system prompts from individual exchange prompt_text fields
-
-**Verification:**
-- System prompt properly passed through provider chain  
-- No system_prompt metadata present in logged conversations (correctly handled via constructor)
-- Conversations properly separated system prompt from exchange data
-- Agent uses clean prompt structure without embedded system prompts
-
-The system prompt is now properly initialized at conversation creation and passed through the entire provider chain, achieving the goal of separating system prompts from exchange data.
+Put the plan here. Do not implement it yet.
