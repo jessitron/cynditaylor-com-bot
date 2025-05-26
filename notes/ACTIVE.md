@@ -13,4 +13,24 @@ That instruction should wind up in the conversation history's metadata section
 
 ## Plan:
 
-put the implementation plan here. Do not change code yet.
+Based on analysis of the codebase:
+
+1. **Understanding**: The conversation system has:
+   - `Conversation` type with `metadata: Dict[str, Any]` field (src/conversation/types.py:57)
+   - `ConversationLogger.add_metadata()` method to update conversation metadata (src/conversation/logger.py:38)
+   - `LoggingConversationPartner` wraps conversation partners and handles logging (src/llm/logging_conversation_partner.py)
+
+2. **Implementation Steps**:
+   a. Add `record_metadata(key: str, value: Any)` method to base `ConversationPartner` class (src/llm/conversation_partner.py)
+   b. Implement the method in `LoggingConversationPartner` to delegate to `conversation_logger.add_metadata()`
+   c. Add the call `llm.record_metadata("instruction", instruction)` in `agent.py` after line 94
+
+3. **Expected Result**: 
+   - The instruction will be stored in the conversation history's metadata section
+   - Conversations will be more informative with context about what task was being performed
+
+## Implementation Status:
+- [] Add `record_metadata` method to `ConversationPartner` class
+- [] Implement `record_metadata` in `LoggingConversationPartner`
+- [] Add call to `record_metadata` in `agent.py`
+- [] Run the application and verify the instruction is logged correctly
