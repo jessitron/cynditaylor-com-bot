@@ -85,7 +85,24 @@ class WebsiteAgent:
 
         # Execute the tool
         tool = self.tools[tool_name]
-        return tool(**args)
+        result = tool(**args)
+        
+        # Post-process list_files results to make paths relative to website_dir
+        if tool_name == "list_files" and result.get("success") and "files" in result:
+            relative_files = []
+            for file_path in result["files"]:
+                # Remove the website_dir prefix to make paths relative
+                if file_path.startswith(self.website_dir + os.sep):
+                    relative_path = file_path[len(self.website_dir + os.sep):]
+                    relative_files.append(relative_path)
+                elif file_path.startswith(self.website_dir + "/"):
+                    relative_path = file_path[len(self.website_dir + "/"):]
+                    relative_files.append(relative_path)
+                else:
+                    relative_files.append(file_path)
+            result["files"] = relative_files
+        
+        return result
 
     @tracer.start_as_current_span("Execute instruction")
     def execute_instruction(self, instruction: str) -> str:
