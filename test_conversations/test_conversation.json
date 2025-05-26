@@ -1,6 +1,20 @@
 {
+  "tool_list": [
+    {
+      "name": "list_files",
+      "description": "List files in a directory"
+    },
+    {
+      "name": "read_file", 
+      "description": "Read the contents of a file"
+    },
+    {
+      "name": "write_file",
+      "description": "Write content to a file"
+    }
+  ],
   "system_prompt": "You are an agent that modifies code in the cynditaylor-com website.\nYou have access to tools that allow you to list files, read and write file contents, and commit changes to the repository.",
-  "version": "1.0",
+  "version": "2.0",
   "conversation_id": "c57d177a-41c7-45f9-bbe0-14b5c4365b47",
   "timestamp": "2025-05-26T15:22:26.719919",
   "metadata": {
@@ -11,15 +25,12 @@
     {
       "id": "exchange-1",
       "prompt": {
-        "prompt_text": "Update the hero section on the homepage to include a new tagline: 'Bringing your memories to life through art'",
-        "metadata": {
-          "temperature": 0.7,
-          "max_tokens": 1000
-        }
+        "type": "text",
+        "text": "Update the hero section on the homepage to include a new tagline: 'Bringing your memories to life through art'"
       },
       "response": {
-        "response_text": "I'll help you update the hero section with a new tagline. First, I need to see what files are available in the website directory.",
-        "tool_use_requests": [
+        "type": "tool_requests",
+        "requests": [
           {
             "tool_name": "list_files",
             "id": "1234a",
@@ -33,7 +44,8 @@
     {
       "id": "exchange-2",
       "prompt": {
-        "tool_use_results": [
+        "type": "tool_results",
+        "results": [
           {
             "id": "1234a",
             "result": {
@@ -46,8 +58,8 @@
         ]
       },
       "response": {
-        "response_text": "Now I'll read the content of the index.html file to locate the hero section and update the tagline.",
-        "tool_use_requests": [
+        "type": "tool_requests",
+        "requests": [
           {
             "tool_name": "read_file",
             "id": "5678b",
@@ -61,7 +73,8 @@
     {
       "id": "exchange-3",
       "prompt": {
-        "tool_use_results": [
+        "type": "tool_results",
+        "results": [
           {
             "id": "5678b",
             "result": {
@@ -72,8 +85,8 @@
         ]
       },
       "response": {
-        "response_text": "I'll now update the tagline in the hero section. I'll use the write_file tool to modify the index.html file with the new tagline.",
-        "tool_use_requests": [
+        "type": "tool_requests",
+        "requests": [
           {
             "tool_name": "write_file",
             "id": "9012c",
@@ -88,7 +101,8 @@
     {
       "id": "exchange-4",
       "prompt": {
-        "tool_use_results": [
+        "type": "tool_results",
+        "results": [
           {
             "id": "9012c",
             "result": {
@@ -99,7 +113,8 @@
         ]
       },
       "response": {
-        "response_text": "I've successfully updated the hero section on the homepage to include the new tagline: 'Bringing your memories to life through art'.\n\nHere's a summary of what I did:\n\n1. First, I listed the files in the website directory to identify the relevant files.\n2. Then, I read the content of index.html to locate the hero section.\n3. I found the tagline in the hero section: `<p class=\"tagline\">Creating beautiful art for your home</p>`\n4. I updated it to: `<p class=\"tagline\">Bringing your memories to life through art</p>`\n5. I wrote the modified content back to index.html.\n\nThe change has been successfully applied to the website. The new tagline is now displayed in the hero section of the homepage.",
+        "type": "final",
+        "text": "I've successfully updated the hero section on the homepage to include the new tagline: 'Bringing your memories to life through art'.\n\nHere's a summary of what I did:\n\n1. First, I listed the files in the website directory to identify the relevant files.\n2. Then, I read the content of index.html to locate the hero section.\n3. I found the tagline in the hero section: `<p class=\"tagline\">Creating beautiful art for your home</p>`\n4. I updated it to: `<p class=\"tagline\">Bringing your memories to life through art</p>`\n5. I wrote the modified content back to index.html.\n\nThe change has been successfully applied to the website. The new tagline is now displayed in the hero section of the homepage."
       }
     }
   ]
