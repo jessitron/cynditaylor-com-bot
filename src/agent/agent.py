@@ -92,7 +92,7 @@ class WebsiteAgent:
         span = trace.get_current_span()
         span.set_attribute("app.instruction", instruction)
         llm = self.llm_provider.start_conversation()
-        # todo: pass the instruction to the llm to add as metadata
+        llm.record_metadata("instruction", instruction)
 
         try:
             # Create the initial prompt

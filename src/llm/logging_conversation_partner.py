@@ -31,6 +31,10 @@ class LoggingConversationPartner(ConversationPartner):
     def get_name(self) -> str:
         return f"Logging-{self.conversation_partner.get_name()}"
 
+    def record_metadata(self, key: str, value) -> None:
+        """Record metadata for this conversation."""
+        self.conversation_logger.add_metadata({key: value})
+
     def finish_conversation(self) -> dict:
         # Save the final conversation state
 

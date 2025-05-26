@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 from src.conversation.types import Prompt, Response
 
@@ -13,6 +14,17 @@ class ConversationPartner(ABC):
 
     @abstractmethod
     def get_name(self) -> str:
+        pass
+
+    def record_metadata(self, key: str, value: Any) -> None:
+        """
+        Record metadata for this conversation.
+        This is an optional method with a default no-op implementation.
+
+        Args:
+            key: The metadata key
+            value: The metadata value
+        """
         pass
 
     def finish_conversation(self) -> dict:
