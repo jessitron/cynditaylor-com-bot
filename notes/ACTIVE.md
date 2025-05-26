@@ -15,3 +15,5 @@ Instead, make the file_read and file_write and file_list tools work in that webs
 5. Ensure all file operations are automatically scoped to the website directory
 
 This will move the directory scoping responsibility from the agent to the tools themselves, making the code cleaner and more logical.
+
+... it got this done for $0.48

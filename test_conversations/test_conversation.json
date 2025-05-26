@@ -51,7 +51,7 @@
             "tool_name": "read_file",
             "id": "5678b",
             "parameters": {
-              "file_path": ".index.html"
+              "file_path": "index.html"
             }
           }
         ],
@@ -96,7 +96,7 @@
             "id": "9012c",
             "result": {
               "success": true,
-              "message": "File written: index.html"
+              "message": "File written: ./index.html"
             }
           }
         ]

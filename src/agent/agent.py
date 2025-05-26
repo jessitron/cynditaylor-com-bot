@@ -44,9 +44,9 @@ class WebsiteAgent:
     def _initialize_tools(self):
         """Initialize tool instances."""
             # File tools
-        self.list_files_tool = ListFilesTool()
-        self.read_file_tool = ReadFileTool()
-        self.write_file_tool = WriteFileTool()
+        self.list_files_tool = ListFilesTool(self.website_dir)
+        self.read_file_tool = ReadFileTool(self.website_dir)
+        self.write_file_tool = WriteFileTool(self.website_dir)
 
         # Git tools
         self.commit_changes_tool = CommitChangesTool()
@@ -72,12 +72,6 @@ class WebsiteAgent:
                 "message": f"Tool '{tool_name}' not found"
             }
 
-        # For file operations, adjust paths to be relative to website_dir
-        if tool_name in ["list_files", "read_file", "write_file"]:
-            if "directory" in args:
-                args["directory"] = os.path.join(self.website_dir, args["directory"])
-            if "file_path" in args:
-                args["file_path"] = os.path.join(self.website_dir, args["file_path"])
 
         # For git operations, add the website_dir
         if tool_name in ["commit_changes", "push_changes"]:
@@ -86,21 +80,6 @@ class WebsiteAgent:
         # Execute the tool
         tool = self.tools[tool_name]
         result = tool(**args)
-        
-        # Post-process list_files results to make paths relative to website_dir
-        if tool_name == "list_files" and result.get("success") and "files" in result:
-            relative_files = []
-            for file_path in result["files"]:
-                # Remove the website_dir prefix to make paths relative
-                if file_path.startswith(self.website_dir + os.sep):
-                    relative_path = file_path[len(self.website_dir + os.sep):]
-                    relative_files.append(relative_path)
-                elif file_path.startswith(self.website_dir + "/"):
-                    relative_path = file_path[len(self.website_dir + "/"):]
-                    relative_files.append(relative_path)
-                else:
-                    relative_files.append(file_path)
-            result["files"] = relative_files
         
         return result
 

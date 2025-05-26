@@ -83,6 +83,9 @@ class FileTools:
 class ListFilesTool(Tool):
     """Tool for listing files in a directory."""
 
+    def __init__(self, base_directory: str = "."):
+        self.base_directory = base_directory
+
     @property
     def name(self) -> str:
         return "list_files"
@@ -103,11 +106,16 @@ class ListFilesTool(Tool):
             Dictionary with the list of files
         """
         try:
+            # Resolve directory relative to base_directory
+            full_directory = os.path.join(self.base_directory, directory)
+            
             if pattern:
-                files = glob.glob(os.path.join(directory, pattern))
+                files = glob.glob(os.path.join(full_directory, pattern))
+                # Return relative paths from base_directory
+                files = [os.path.relpath(f, self.base_directory) for f in files]
             else:
-                files = [os.path.join(directory, f) for f in os.listdir(directory)
-                       if os.path.isfile(os.path.join(directory, f))]
+                files = [os.path.join(directory, f) for f in os.listdir(full_directory)
+                       if os.path.isfile(os.path.join(full_directory, f))]
 
             return {
                 "success": True,
@@ -122,6 +130,9 @@ class ListFilesTool(Tool):
 
 class ReadFileTool(Tool):
     """Tool for reading the contents of a file."""
+
+    def __init__(self, base_directory: str = "."):
+        self.base_directory = base_directory
 
     @property
     def name(self) -> str:
@@ -142,13 +153,16 @@ class ReadFileTool(Tool):
             Dictionary with the file content
         """
         try:
-            if not os.path.isfile(file_path):
+            # Resolve file_path relative to base_directory
+            full_file_path = os.path.join(self.base_directory, file_path)
+            
+            if not os.path.isfile(full_file_path):
                 return {
                     "success": False,
                     "message": f"File does not exist: {file_path}"
                 }
 
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(full_file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
 
             return {
@@ -164,6 +178,9 @@ class ReadFileTool(Tool):
 
 class WriteFileTool(Tool):
     """Tool for writing content to a file."""
+
+    def __init__(self, base_directory: str = "."):
+        self.base_directory = base_directory
 
     @property
     def name(self) -> str:
@@ -185,10 +202,13 @@ class WriteFileTool(Tool):
             Dictionary with the result of the operation
         """
         try:
+            # Resolve file_path relative to base_directory
+            full_file_path = os.path.join(self.base_directory, file_path)
+            
             # Ensure the directory exists
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            os.makedirs(os.path.dirname(full_file_path), exist_ok=True)
 
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(full_file_path, 'w', encoding='utf-8') as f:
                 f.write(content)
 
             return {
