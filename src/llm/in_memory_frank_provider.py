@@ -22,7 +22,7 @@ class InMemoryFrankProvider(LLMProvider):
         self.conversation_logger = conversation_logger
 
     @tracer.start_as_current_span("Initialize In-Memory Frank")
-    def start_conversation(self) -> ConversationPartner:
+    def start_conversation(self, system_prompt: str = "") -> ConversationPartner:
         span = trace.get_current_span()
         span.set_attribute("app.conversation-reader.type", "in-memory")
         span.set_attribute("app.conversation.id", self.conversation.conversation_id)
@@ -33,7 +33,8 @@ class InMemoryFrankProvider(LLMProvider):
 
         conversation_partner = LoggingConversationPartner(
             OpenTelemetryConversationPartnerDecorator(Frank(conversation.exchanges)),
-            conversation_logger=self.conversation_logger
+            conversation_logger=self.conversation_logger,
+            system_prompt=system_prompt
         )
         
         return conversation_partner

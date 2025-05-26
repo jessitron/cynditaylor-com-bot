@@ -21,7 +21,7 @@ CONVERSATION_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname
 class FrankProvider(LLMProvider):
 
     @tracer.start_as_current_span("Initialize Frank") # TODO: move this part into the OpenTelemetryLLMProviderDecorator
-    def start_conversation(self) -> ConversationPartner:
+    def start_conversation(self, system_prompt: str = "") -> ConversationPartner:
         # Read the conversation
         span = trace.get_current_span()
         span.set_attribute("app.conversation-reader.filename", CONVERSATION_FILE) # TODO: move this into the LoggingConversationPartner
@@ -31,4 +31,4 @@ class FrankProvider(LLMProvider):
             logger.error(f"Error loading conversation file: {e}")
             raise
 
-        return LoggingConversationPartner(OpenTelemetryConversationPartnerDecorator(Frank(conversation.exchanges)))
+        return LoggingConversationPartner(OpenTelemetryConversationPartnerDecorator(Frank(conversation.exchanges)), system_prompt=system_prompt)

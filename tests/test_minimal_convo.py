@@ -1,13 +1,9 @@
 import unittest
-import os
 
-from requests import Response
-from conversation.types import Conversation, Exchange, Prompt
+from src.conversation.types import Conversation, Exchange, Prompt, Response, PromptMetadata
 from src.agent.agent import WebsiteAgent
 from src.llm.in_memory_frank_provider import InMemoryFrankProvider
-from src.llm.conversation_reader import ConversationReader
 from src.conversation.in_memory_logger import InMemoryConversationLogger
-
 
 class TestMinimalConvo(unittest.TestCase):
     def test_minimal_conversation_with_no_tool_calls(self):
@@ -22,7 +18,7 @@ class TestMinimalConvo(unittest.TestCase):
                     id="exchange-1",
                     prompt=Prompt(
                         prompt_text="Why did the monkey cross the road?",
-                        metadata={"temperature": 0.7, "max_tokens": 1000},
+                        metadata=PromptMetadata(temperature=0.7, max_tokens=1000),
                     ),
                     response=Response(
                         response_text="To get away with the food he just stole from you."

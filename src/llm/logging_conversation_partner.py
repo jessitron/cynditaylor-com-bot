@@ -14,9 +14,9 @@ class LoggingConversationPartner(ConversationPartner):
     to any ConversationPartner implementation.
     """
 
-    def __init__(self, conversation_partner: ConversationPartner, conversation_logger=None, output_dir: str = "conversation_history"):
+    def __init__(self, conversation_partner: ConversationPartner, conversation_logger=None, output_dir: str = "conversation_history", system_prompt: str = ""):
         self.conversation_partner = conversation_partner
-        self.conversation_logger = conversation_logger or ConversationLogger(output_dir=output_dir)
+        self.conversation_logger = conversation_logger or ConversationLogger(output_dir=output_dir, system_prompt=system_prompt)
         logger.info(f"Initialized LoggingConversationPartner with logger: {self.conversation_logger.filename()}") # TODO: give the conversation logger a describe method instead, so it can say whatever is relevant
 
     def get_response_for_prompt(self, prompt: Prompt) -> Response:
@@ -32,7 +32,8 @@ class LoggingConversationPartner(ConversationPartner):
         return f"Logging-{self.conversation_partner.get_name()}"
 
     def record_metadata(self, key: str, value) -> None:
-       self.conversation_logger.add_metadata({key: value})
+        """Record metadata for this conversation."""
+        self.conversation_logger.add_metadata({key: value})
 
     def finish_conversation(self) -> dict:
         # Save the final conversation state

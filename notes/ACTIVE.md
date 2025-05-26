@@ -62,8 +62,26 @@ Leave the tests alone for now
 
 The implementation successfully separates system prompts from exchange data, making tests easier to maintain by removing hard-coded system prompt expectations.
 
-## next: pass system_prompt into initialization
+## ✅ Completed: pass system_prompt into initialization
 
-I reverted some dumb stuff
+**Updated provider interface:**
+- Modified `LLMProvider.start_conversation()` to accept `system_prompt: str` parameter
+- Updated `FrankProvider` and `InMemoryFrankProvider` to accept and pass through system_prompt
+- Updated `LoggingConversationPartner` to accept system_prompt and pass to ConversationLogger
 
-Now, pass the system prompt in to start_conversation instead
+**Updated agent integration:**
+- Modified agent.py to pass system_prompt directly to `start_conversation()`
+- Removed metadata-based system_prompt handling
+- System prompt is now initialized at conversation creation rather than via metadata
+
+**Test data consistency:**
+- Updated test_conversation.json to include system_prompt field
+- Cleaned up embedded system prompts from individual exchange prompt_text fields
+
+**Verification:**
+- System prompt properly passed through provider chain  
+- No system_prompt metadata present in logged conversations (correctly handled via constructor)
+- Conversations properly separated system prompt from exchange data
+- Agent uses clean prompt structure without embedded system prompts
+
+The system prompt is now properly initialized at conversation creation and passed through the entire provider chain, achieving the goal of separating system prompts from exchange data.

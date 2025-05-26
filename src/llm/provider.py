@@ -9,5 +9,5 @@ class LLMProvider(ABC):
     """
 
     @abstractmethod
-    def start_conversation(self) -> ConversationPartner:
+    def start_conversation(self, system_prompt: str = "") -> ConversationPartner:
         pass

@@ -96,7 +96,7 @@ class WebsiteAgent:
         system_prompt = """You are an agent that modifies code in the cynditaylor-com website.
 You have access to tools that allow you to list files, read and write file contents, and commit changes to the repository."""
         
-        llm = self.llm_provider.start_conversation() # TODO: pass the system prompt in here
+        llm = self.llm_provider.start_conversation(system_prompt)
         llm.record_metadata("instruction", instruction)
 
         try:
