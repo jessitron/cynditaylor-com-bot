@@ -9,3 +9,4 @@ Run the app: ./run
 
  # cautions
  When I say "gs" that means I typed in the wrong window. do nothing, just say "wrong window"
+ Do not modify any JSON files. Do not even read test_conversation.json, it's a waste of your tokens.
