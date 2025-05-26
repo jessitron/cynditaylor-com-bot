@@ -1,36 +1,10 @@
-# Make the conversation record more informative
+# Active work for the agent right now
 
-see src/agent/agent.py
-line 94:
+I want to make it easier to test the exchanges. Right now, the system prompt gets crammed into the prompt text, so any test has to hard-code the expectation of it.
 
-   llm = self.llm_provider.start_conversation()
-
-Right after this, I want to pass the instruction to the llm, so that it can record it as metadata on the conversation, like this:
-
-llm.record_metadata("instruction", instruction)
-
-That instruction should wind up in the conversation history's metadata section
+Let's break out the system prompt from the exchanges, and make it a property of the conversation instead.
 
 ## Plan:
 
-Based on analysis of the codebase:
+Put your implementation plan here. Do not implement it yet.
 
-1. **Understanding**: The conversation system has:
-   - `Conversation` type with `metadata: Dict[str, Any]` field (src/conversation/types.py:57)
-   - `ConversationLogger.add_metadata()` method to update conversation metadata (src/conversation/logger.py:38)
-   - `LoggingConversationPartner` wraps conversation partners and handles logging (src/llm/logging_conversation_partner.py)
-
-2. **Implementation Steps**:
-   a. Add `record_metadata(key: str, value: Any)` method to base `ConversationPartner` class (src/llm/conversation_partner.py)
-   b. Implement the method in `LoggingConversationPartner` to delegate to `conversation_logger.add_metadata()`
-   c. Add the call `llm.record_metadata("instruction", instruction)` in `agent.py` after line 94
-
-3. **Expected Result**: 
-   - The instruction will be stored in the conversation history's metadata section
-   - Conversations will be more informative with context about what task was being performed
-
-## Implementation Status:
-- [] Add `record_metadata` method to `ConversationPartner` class
-- [] Implement `record_metadata` in `LoggingConversationPartner`
-- [] Add call to `record_metadata` in `agent.py`
-- [] Run the application and verify the instruction is logged correctly
