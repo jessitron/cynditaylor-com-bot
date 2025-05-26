@@ -62,7 +62,7 @@ Get the data structures right.
 ### Step 4: Update serialization methods
 1. Update `to_dict()` method to handle new union types and tool_list
 2. Update `from_dict()` method to reconstruct new data structures
-3. Handle backward compatibility if needed
+3. Backwards compatibility is NOT needed.
 
 ### Step 5: Migration considerations
 - The current ToolCall structure conflates tool use requests and results
