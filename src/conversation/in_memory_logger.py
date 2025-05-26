@@ -1,13 +1,14 @@
 import uuid
 import datetime
-from typing import Optional
+from typing import Optional, Union, List
 
-from src.conversation.types import Conversation, Exchange, Prompt, Response
+from src.conversation.types import Conversation, Exchange, TextPrompt, ToolUseResults, FinalResponse, ToolUseRequests, Tool
 
 
 class InMemoryConversationLogger:
-    def __init__(self, system_prompt: str = ""):
+    def __init__(self, system_prompt: str = "", tools: List[Tool] = None):
         self.conversation = Conversation(
+            tool_list=tools or [],
             system_prompt=system_prompt,
             conversation_id=str(uuid.uuid4()),
             timestamp=datetime.datetime.now(),
@@ -29,17 +30,18 @@ class InMemoryConversationLogger:
 
         return current_prompt[i:].strip()
 
-    def log_exchange(self, prompt: Prompt, response: Response) -> None:
+    def log_exchange(self, prompt: Union[TextPrompt, ToolUseResults], response: Union[FinalResponse, ToolUseRequests]) -> None:
         """
         Log an exchange between a user and an LLM.
 
         Args:
-            prompt: The Prompt object sent to the LLM
-            response: The Response object received from the LLM
+            prompt: The prompt sent to the LLM (TextPrompt or ToolUseResults)
+            response: The response received from the LLM (FinalResponse or ToolUseRequests)
         """
-        # Update the new_text field if it's not already set
-        if not prompt.new_text and self.previous_prompt_text:
-            prompt.new_text = self.find_new_portion(prompt.prompt_text, self.previous_prompt_text)
+        # Track text for finding new portions (only applies to TextPrompt)
+        if isinstance(prompt, TextPrompt):
+            # We could enhance TextPrompt to track new portions if needed
+            pass
 
         # Create the exchange
         exchange_id = f"exchange-{len(self.conversation.exchanges) + 1}"
@@ -52,8 +54,9 @@ class InMemoryConversationLogger:
         # Add the exchange to the conversation
         self.conversation.exchanges.append(exchange)
 
-        # Update the previous prompt
-        self.previous_prompt_text = prompt.prompt_text
+        # Update the previous prompt (only for TextPrompt)
+        if isinstance(prompt, TextPrompt):
+            self.previous_prompt_text = prompt.text
 
     def get_conversation(self) -> Conversation:
         """Return the logged conversation."""
