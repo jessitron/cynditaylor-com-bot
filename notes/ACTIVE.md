@@ -1,99 +1,33 @@
-# Separate tool list, tool use and tool result
+# Factoring out test utilities
 
-We are going to refactor the Conversation format.
+Currently, there are two test files. They have a lot of duplicated code around comparing expected/actual and printing the difference.
+(It also doesn't work, it needs to be about the new structure)
 
-Eliding the parts that aren't changing, the conversation will be more like
+Pull that code into a shared place. After that, make it work.
 
-Conversation(
-    tool_list: List[Tool],
-    exchanges: List[Exchange]
-)
+## Plan
 
-The tool list is at the conversation level because it is something that is negotiated at the beginning of the conversation.
+1. **Create shared test utilities module** (`tests/conversation_test_utils.py`)
+   - Extract the identical methods from both test files:
+     - `assert_conversations_match()` - Main comparison with detailed error messages
+     - `_assert_exchanges_match()` - Exchange-level comparison
+     - `_assert_prompts_match()` - Prompt comparison including metadata and tool calls
+     - `_assert_responses_match()` - Response comparison including tool calls  
+     - `_assert_tool_calls_match()` - Tool call list comparison
+     - `_print_conversation_diff()` - Conversation-level diff printing
+     - `_print_exchange_diff()` - Detailed exchange diff printing
+     - `_print_trace_url_if_available()` - Debug trace URL printing
 
-Exchange(
-    prompt: TextPrompt OR ToolUseResults,
-    response: FinalResponse OR ToolUseRequests,
-)
+2. **Create ConversationTestCase base class**
+   - Inherit from `unittest.TestCase`
+   - Include all the extracted comparison methods
+   - Make it easy for test classes to inherit these utilities
 
-TextPrompt has only a text field
+3. **Refactor existing test files** 
+   - Make both test classes inherit from `ConversationTestCase`
+   - Remove the duplicated methods (lines 52-209 in both files)
+   - Import the new utilities module
 
-ToolUseRequests is a list of ToolUse
-
-ToolUse(
-    tool_name: str,
-    id: str,
-    parameters: Dict[str, Any],
-)
-
-ToolUseResults is a list of ToolUseResult
-
-ToolUseResult(
-    id: str,
-    result: Any,
-)
-
-FinalResponse has only a text field
-
-## Implementation Plan
-
-Do not include tests in this plan. I will worry about those later. 
-Get the data structures right.
-
-### Step 1: Define new data structures
-1. Create `Tool` dataclass with minimal fields needed for tool description
-2. Create `TextPrompt` dataclass with just `text` field
-3. Create `ToolUse` dataclass with `tool_name`, `id`, and `parameters`
-4. Create `ToolUseRequests` as a list wrapper for `ToolUse` objects
-5. Create `ToolUseResult` dataclass with `id` and `result`
-6. Create `ToolUseResults` as a list wrapper for `ToolUseResult` objects  
-7. Create `FinalResponse` dataclass with just `text` field
-
-### Step 2: Update Exchange structure
-1. Modify `Exchange` to use union types: `prompt: TextPrompt | ToolUseResults`
-2. Modify `Exchange` to use union types: `response: FinalResponse | ToolUseRequests`
-3. Keep the `id` field on Exchange
-
-### Step 3: Update Conversation structure
-1. Add `tool_list: List[Tool]` field to Conversation
-2. Keep existing `exchanges: List[Exchange]` but with new Exchange structure
-3. Preserve other Conversation fields (system_prompt, version, etc.)
-
-### Step 4: Update serialization methods
-1. Update `to_dict()` method to handle new union types and tool_list
-2. Update `from_dict()` method to reconstruct new data structures
-3. Backwards compatibility is NOT needed.
-
-### Step 5: Migration considerations
-- The current ToolCall structure conflates tool use requests and results
-- New structure separates tool requests (ToolUse) from results (ToolUseResult)
-- Tool calls will be split across exchanges: request in one exchange's response, results in next exchange's prompt
-
-## Summary of Accomplishments
-
-✅ Completed implementation of refactored conversation format:
-
-1. **New data structures defined**: Tool, TextPrompt, ToolUse, ToolUseRequests, ToolUseResult, ToolUseResults, FinalResponse
-2. **Exchange updated**: Now uses union types for prompt (TextPrompt | ToolUseResults) and response (FinalResponse | ToolUseRequests)  
-3. **Conversation updated**: Added tool_list field, updated to version 2.0
-4. **Serialization updated**: Complete rewrite of to_dict() and from_dict() methods to handle new union types and tool_list
-
-The refactoring breaks existing imports (Prompt, Response classes removed) but achieves the goal of properly separating tool use requests from tool use results across exchanges. Tests currently fail due to import errors, which is expected as the old types were removed.
-
-## Fix Status Update
-
-✅ **App now runs successfully!** Fixed all import errors and refactored core components:
-
-1. **conversation_partner.py**: Updated interface to use union types
-2. **opentelemetry_conversation_partner.py**: Updated telemetry tracking for new types
-3. **frank.py**: Simplified to work with new Exchange structure
-4. **logger.py**: Updated ConversationLogger to use new types and tool_list
-5. **logging_conversation_partner.py**: Updated decorator to handle new types
-6. **agent.py**: Major refactor to use proper tool request/result flow
-7. **types.py**: Fixed from_dict method with proper error handling
-
-The app successfully starts and processes instructions using the new conversation format. The refactoring maintains the core functionality while properly separating tool requests from results across exchanges.
-
-## One Last Thing
-
-Just this once, look at @test_conversations/test_conversation.json and make it match the new format.
+4. **Fix/update the utilities for new conversation structure**
+   - Ensure all comparison methods work correctly with current conversation types
+   - Test that the refactored tests still pass
