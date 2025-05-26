@@ -40,4 +40,31 @@ FinalResponse has only a text field
 Do not include tests in this plan. I will worry about those later. 
 Get the data structures right.
 
-Put the plan here. Do not implement it yet.
+### Step 1: Define new data structures
+1. Create `Tool` dataclass with minimal fields needed for tool description
+2. Create `TextPrompt` dataclass with just `text` field
+3. Create `ToolUse` dataclass with `tool_name`, `id`, and `parameters`
+4. Create `ToolUseRequests` as a list wrapper for `ToolUse` objects
+5. Create `ToolUseResult` dataclass with `id` and `result`
+6. Create `ToolUseResults` as a list wrapper for `ToolUseResult` objects  
+7. Create `FinalResponse` dataclass with just `text` field
+
+### Step 2: Update Exchange structure
+1. Modify `Exchange` to use union types: `prompt: TextPrompt | ToolUseResults`
+2. Modify `Exchange` to use union types: `response: FinalResponse | ToolUseRequests`
+3. Keep the `id` field on Exchange
+
+### Step 3: Update Conversation structure
+1. Add `tool_list: List[Tool]` field to Conversation
+2. Keep existing `exchanges: List[Exchange]` but with new Exchange structure
+3. Preserve other Conversation fields (system_prompt, version, etc.)
+
+### Step 4: Update serialization methods
+1. Update `to_dict()` method to handle new union types and tool_list
+2. Update `from_dict()` method to reconstruct new data structures
+3. Handle backward compatibility if needed
+
+### Step 5: Migration considerations
+- The current ToolCall structure conflates tool use requests and results
+- New structure separates tool requests (ToolUse) from results (ToolUseResult)
+- Tool calls will be split across exchanges: request in one exchange's response, results in next exchange's prompt
