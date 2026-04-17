@@ -53,6 +53,13 @@
 3. ✅ `inbound.py` prompt drives a 7-step flow: parse → decide → sync → list → read → write → commit → reply. Prompt explicitly tells the agent the commit is local-only, so the reply doesn't oversell.
 4. ✅ Roundtrip verified: a "change the hero text" fake inbound produced a clean 1-line diff on `index.html`, a Cyndibot-authored commit, and a coherent reply email in S3.
 
+## Slice: real SES inbound+outbound loop ✅
+
+1. ✅ Verified `jessitron@jessitron.com` as an SES email-address identity (`scripts/ses-verify-email`). Real-recipient outbound confirmed via `scripts/smoke-send-reply`.
+2. ✅ `scripts/pretend-mom-roundtrip` exercises the full path with no staging: SES send from `pretend-mom@cyndibot.jessitron.honeydemo.io` → SES receipt rule → S3 → agent → SES send of reply → S3.
+3. **Design note:** once the Lambda is in front, it can filter by recipient username. `cyndi@cyndibot...` (or whatever we settle on) triggers the agent; `pretend-mom@`, `smoketest@`, etc. stay as test-fixture addresses that land in S3 but don't spin up agent work. Lets us seed integration data without invoking the real pipeline.
+4. First real-SES run surfaced nice behavior: the pretend-mom message asked for a revert that wasn't yet on origin/main. The agent read the file, saw the target state already matched, declined to commit a no-op, and replied explaining. Prompt is doing its job.
+
 ## Slice: push to live site (tool only, not yet agent-accessible) ✅
 
 1. ✅ `push_site_changes_impl(remote_branch="main")` shells out to `git push`; the `@tool` wrapper is no-arg and main-only. No `GITHUB_TOKEN` plumbing — relies on the local git credential helper (macOS keychain works out of the box).
