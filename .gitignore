@@ -3,3 +3,4 @@ cynditaylor-com/
 __pycache__/
 chat_logs/
 conversation_history/
+.claude/settings.local.json
