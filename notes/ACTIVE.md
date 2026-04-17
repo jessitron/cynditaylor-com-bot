@@ -46,13 +46,16 @@
 
 **Sandbox reality (correcting earlier note):** account *is* in SES sandbox (`ProductionAccessEnabled: false`). Can only send to verified identities. The cyndibot domain is verified, which is why the self-loop works. For real replies to mom / Jessitron's gmail we need either `scripts/ses-verify-email <addr>` (adds an address identity, recipient must click the verification email) or production-access approval.
 
+## Slice: agent edits the site ✅
+
+1. ✅ `site_tools.py`: `sync_workspace`, `list_site_files`, `read_site_file`, `write_site_file`, `commit_site_changes`. Hand-rolled over shelling to `git` rather than pulling in `strands-agents-tools` — narrower, path-validated (no `..`, no `.git/`), and the agent doesn't need a generic shell. Commit author is `Cyndibot <bot@cyndibot.jessitron.honeydemo.io>`, set at clone time.
+2. ✅ Workspace lives at `./cynditaylor-com` (already in `.gitignore`); configurable via `CYNDIBOT_WORKSPACE`. For AgentCore prod we'll set that to `/mnt/workspace/cynditaylor-com`.
+3. ✅ `inbound.py` prompt drives a 7-step flow: parse → decide → sync → list → read → write → commit → reply. Prompt explicitly tells the agent the commit is local-only, so the reply doesn't oversell.
+4. ✅ Roundtrip verified: a "change the hero text" fake inbound produced a clean 1-line diff on `index.html`, a Cyndibot-authored commit, and a coherent reply email in S3.
+
 ## After that (in order)
 
-1. More tools:
-   - `git.ensure_clone(repo_url)` + `git.reset_to_main()`
-   - `git.commit_and_push(message)`
-   - filesystem tools via `strands-agents-tools` (`file_read`, `file_write`, `shell`)
-2. End-to-end dry run: a local driver feeds a real inbound s3 key to the agent, which produces a real commit on `cynditaylor-com` and a reply email to Jessitron (SES sandbox only lets us send to verified addresses).
+1. Real push: `push_site_changes` tool. Needs `GITHUB_TOKEN` in `.env`. Decide whether to put it in the agent's workflow or gate behind an approval step.
 3. AgentCore packaging: Dockerfile, ECR push, `create-agent-runtime` with `filesystemConfigurations.sessionStorage`. Log every command in `infra/README.md`.
 4. Lambda wired to the SES receipt rule; Lambda invokes AgentCore. Session id = sender's email.
 5. Request SES production access so mom can actually send email to the bot.
