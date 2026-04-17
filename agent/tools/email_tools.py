@@ -27,6 +27,7 @@ def parse_inbound_impl(s3_key: str) -> dict[str, Any]:
         "from": str(msg.get("From", "")),
         "to": str(msg.get("To", "")),
         "subject": str(msg.get("Subject", "")),
+        "date": str(msg.get("Date", "")),
         "body_text": _best_body(msg, "plain"),
         "body_html": _best_body(msg, "html"),
         "message_id": str(msg.get("Message-ID", "")),
@@ -72,8 +73,11 @@ def parse_inbound(s3_key: str) -> dict[str, Any]:
             receipt.action.objectKey from the SES notification.
 
     Returns:
-        Dict with from, to, subject, body_text, body_html, message_id,
-        in_reply_to, references. Missing headers return as empty strings.
+        Dict with from, to, subject, date, body_text, body_html,
+        message_id, in_reply_to, references. Missing headers return as
+        empty strings. `date` is the RFC 2822 Date header from the
+        email (not the current time) -- use it for changelog entries so
+        requests and records line up.
     """
     return parse_inbound_impl(s3_key)
 
