@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PHOENIX_CONTAINER="cynditaylor-phoenix"
+PHOENIX_IMAGE="arizephoenix/phoenix:latest"
+
+start_phoenix() {
+  if docker ps --format '{{.Names}}' | grep -q "^${PHOENIX_CONTAINER}$"; then
+    echo "Phoenix already running -> http://localhost:6006"
+    return
+  fi
+
+  if docker ps -a --format '{{.Names}}' | grep -q "^${PHOENIX_CONTAINER}$"; then
+    echo "Starting existing Phoenix container..."
+    docker start "${PHOENIX_CONTAINER}" >/dev/null
+  else
+    echo "Pulling and starting Phoenix..."
+    docker run -d \
+      --name "${PHOENIX_CONTAINER}" \
+      -p 6006:6006 \
+      -p 4317:4317 \
+      "${PHOENIX_IMAGE}" >/dev/null
+  fi
+
+  echo "Phoenix UI  -> http://localhost:6006"
+  echo "OTLP HTTP   -> http://localhost:6006/v1/traces"
+  echo "OTLP gRPC   -> http://localhost:4317"
+}
+
+start_phoenix

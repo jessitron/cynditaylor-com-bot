@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PHOENIX_CONTAINER="cynditaylor-phoenix"
+PHOENIX_URL="http://localhost:6006"
+
+if ! docker ps --format '{{.Names}}' | grep -q "^${PHOENIX_CONTAINER}$"; then
+  echo "FAIL: container '${PHOENIX_CONTAINER}' is not running"
+  exit 1
+fi
+
+status=$(docker ps --filter "name=${PHOENIX_CONTAINER}" --format "{{.Status}}")
+echo "container: ${status}"
+
+http_code=$(curl -s -o /dev/null -w "%{http_code}" "${PHOENIX_URL}/")
+echo "UI ${PHOENIX_URL}/ -> HTTP ${http_code}"
+
+if [[ "${http_code}" != "200" ]]; then
+  echo "FAIL: expected HTTP 200 from UI"
+  exit 1
+fi
+
+echo "OK"
