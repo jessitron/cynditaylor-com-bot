@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REGION="us-west-2"
+
+echo "=== SES account sending status (${REGION}) ==="
+aws sesv2 get-account --region "${REGION}" \
+  --query '{sandbox: ProductionAccessEnabled, enabled: SendingEnabled, quota: SendQuota}' \
+  --output json
+
+echo
+echo "=== Verified identities ==="
+aws sesv2 list-email-identities --region "${REGION}" --output table \
+  --query 'EmailIdentities[].[IdentityType,IdentityName,VerifiedForSendingStatus,SendingEnabled]'
