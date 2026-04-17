@@ -53,9 +53,13 @@
 3. ✅ `inbound.py` prompt drives a 7-step flow: parse → decide → sync → list → read → write → commit → reply. Prompt explicitly tells the agent the commit is local-only, so the reply doesn't oversell.
 4. ✅ Roundtrip verified: a "change the hero text" fake inbound produced a clean 1-line diff on `index.html`, a Cyndibot-authored commit, and a coherent reply email in S3.
 
-## After that (in order)
+## Slice: push to live site (tool only, not yet agent-accessible) ✅
 
-1. Real push: `push_site_changes` tool. Needs `GITHUB_TOKEN` in `.env`. Decide whether to put it in the agent's workflow or gate behind an approval step.
+1. ✅ `push_site_changes_impl(remote_branch="main")` shells out to `git push`; the `@tool` wrapper is no-arg and main-only. No `GITHUB_TOKEN` plumbing — relies on the local git credential helper (macOS keychain works out of the box).
+2. ✅ `scripts/smoke-push-site` pushes HEAD to `origin/cyndibot-smoke-test`, verifies via `ls-remote`, deletes the branch. Auth path confirmed without touching `main`.
+3. Pending decision: when do we wire `push_site_changes` into `agent/inbound.py`? Current plan is to watch one manual main-push go through first.
+
+## After that (in order)
 3. AgentCore packaging: Dockerfile, ECR push, `create-agent-runtime` with `filesystemConfigurations.sessionStorage`. Log every command in `infra/README.md`.
 4. Lambda wired to the SES receipt rule; Lambda invokes AgentCore. Session id = sender's email.
 5. Request SES production access so mom can actually send email to the bot.
