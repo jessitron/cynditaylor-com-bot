@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Show the state of the local site workspace: recent commits, working
+# tree status, and what the HEAD sha matches on origin.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+WORKSPACE="${CYNDIBOT_WORKSPACE:-cynditaylor-com}"
+
+if [[ ! -d "${WORKSPACE}/.git" ]]; then
+  echo "No workspace at ./${WORKSPACE} yet. Run scripts/agent-fake-roundtrip or similar to create it." >&2
+  exit 1
+fi
+
+cd "${WORKSPACE}"
+
+echo "=== ./${WORKSPACE} ==="
+echo
+echo "-- recent commits --"
+git log --oneline -5
+echo
+echo "-- status --"
+git status --short
+echo
+echo "-- HEAD vs origin/main --"
+git rev-parse HEAD
+git rev-parse origin/main 2>/dev/null || echo "(no origin/main ref cached)"

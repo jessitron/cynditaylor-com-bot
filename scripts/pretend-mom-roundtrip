@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Full loop with REAL SES on both ends (no staged inbound, no self-loop):
+#   1. pretend-mom@cyndibot... sends via SES to pretend-bot@cyndibot...
+#   2. SES receipt rule drops it into s3://cyndibot-incoming-emails/
+#   3. Run the agent on the newly landed s3 key.
+#   4. Agent parses, syncs, edits, commits, replies via SES.
+#   5. Agent's reply lands back in the same S3 bucket (also cyndibot domain).
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source .env
+
+# Timestamp we'll use to filter: only look at inbounds newer than now.
+SINCE=$(python3 -c "from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())")
+
+echo "=== Sending pretend-mom email via SES ==="
+MSG_ID=$(uv run python scripts/_send_as_pretend_mom.py)
+echo "SES MessageId: ${MSG_ID}"
+echo
+
+echo "=== Waiting for SES receipt -> S3 ==="
+KEY=""
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  sleep 3
+  if KEY=$(uv run python scripts/_pick_newest_inbound.py "${SINCE}" 2>/dev/null); then
+    break
+  fi
+  echo "  not yet (attempt ${i})"
+done
+
+if [[ -z "${KEY}" ]]; then
+  echo "Timed out waiting for inbound." >&2
+  exit 1
+fi
+
+echo "landed: s3://cyndibot-incoming-emails/${KEY}"
+echo
+
+echo "=== Running agent on ${KEY} ==="
+uv run python -m agent.inbound "${KEY}"
+echo
+
+echo "=== Site workspace after run ==="
+scripts/site-status
+echo
+
+echo "=== Agent's reply (newest object in S3) ==="
+# Wait briefly for the reply to land via SES, then dump headers + body start.
+sleep 4
+scripts/ses-show-inbound \
+  | sed -n '/^From:/,$p' \
+  | head -40
+echo
+
+echo "=== Latest Phoenix trace ==="
+scripts/check-last-span

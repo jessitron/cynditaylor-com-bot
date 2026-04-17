@@ -12,14 +12,20 @@ that our threading headers round-trip correctly.
 
 from agent.tools.email_tools import send_reply_impl
 
-TO = "smoketest@cyndibot.jessitron.honeydemo.io"
-SUBJECT = "Cyndibot send_reply smoke test"
+TO = "jessitron@jessitron.com"
+SUBJECT = "Cyndibot says hi"
 BODY = (
-    "This is a smoke test of the send_reply tool. If you're reading this "
-    "via scripts/ses-show-inbound, the round-trip works and we can wire "
-    "the tool into the Strands agent next.\n"
+    "This is a smoke test of the send_reply tool against a real\n"
+    "verified recipient (not the self-loop).\n"
+    "\n"
+    "If you're reading this in your inbox, SES outbound to the\n"
+    "verified jessitron@jessitron.com identity works end-to-end,\n"
+    "and the agent can do the same thing the moment we grant it\n"
+    "a real recipient to reply to.\n"
+    "\n"
+    "— Cyndibot\n"
 )
-FAKE_IN_REPLY_TO = "<fake-original@example.com>"
+FAKE_IN_REPLY_TO = ""
 
 
 def main() -> None:
