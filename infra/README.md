@@ -34,3 +34,73 @@ aws bedrock-runtime converse \
 - Default model for this project: `us.anthropic.claude-sonnet-4-5-20250929-v1:0`.
 
 No IAM roles, no resources, no policies created yet.
+
+## 2026-04-17 — SES inbound email for cyndibot.jessitron.honeydemo.io
+
+Pivot from Twilio SMS (abandoned due to US toll-free A2P compliance) to SES email.
+
+### Findings before changes
+
+- Route 53 zone `jessitron.honeydemo.io.` exists as `/hostedzone/Z0975156EQFWS502JWNW`.
+- SES in us-west-2 already had an identity `instruqt.jessitron.honeydemo.io` and an active receipt rule set `instruqt-email-ruleset` with a single rule scoped to that other domain. We add to that same rule set (only one can be active per region).
+
+Scripts in `scripts/` that run these commands (all idempotent where possible):
+
+```bash
+scripts/ses-survey                      # list hosted zones, identities, rule sets
+scripts/ses-describe-ruleset            # inspect active receipt rule set
+scripts/ses-create-identity             # create domain identity, print DKIM tokens
+scripts/route53-add-ses-records         # add 3 DKIM CNAMEs + MX for SES inbound
+scripts/s3-create-inbound-bucket        # create bucket + SES-write policy
+scripts/ses-add-receipt-rule            # add a rule to the existing ruleset
+```
+
+### Commands run (state-changing)
+
+```bash
+# 1. Create SES domain identity (DKIM-based verification).
+aws sesv2 create-email-identity \
+  --region us-west-2 \
+  --email-identity cyndibot.jessitron.honeydemo.io
+
+# 2. Route 53 CNAMEs (3x DKIM) + MX -> inbound-smtp.us-west-2.amazonaws.com priority 10.
+#    Built via scripts/_build_ses_change_batch.py from live DKIM tokens.
+aws route53 change-resource-record-sets \
+  --hosted-zone-id Z0975156EQFWS502JWNW \
+  --change-batch '<generated>'
+# ChangeInfo id: /change/C09348254DEPDCSWONNL
+
+# 3. S3 bucket for inbound mail, public access fully blocked.
+aws s3api create-bucket \
+  --bucket cyndibot-incoming-emails \
+  --region us-west-2 \
+  --create-bucket-configuration LocationConstraint=us-west-2
+aws s3api put-public-access-block \
+  --bucket cyndibot-incoming-emails \
+  --public-access-block-configuration \
+    BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+aws s3api put-bucket-policy \
+  --bucket cyndibot-incoming-emails \
+  --policy '<allow ses.amazonaws.com PutObject, SourceAccount=414852377253>'
+
+# 4. Receipt rule added to existing active rule set.
+aws ses create-receipt-rule \
+  --region us-west-2 \
+  --rule-set-name instruqt-email-ruleset \
+  --rule '{
+    "Name": "cyndibot-inbound",
+    "Enabled": true,
+    "TlsPolicy": "Optional",
+    "Recipients": ["cyndibot.jessitron.honeydemo.io"],
+    "Actions": [{"S3Action": {"BucketName": "cyndibot-incoming-emails", "ObjectKeyPrefix": "emails/"}}],
+    "ScanEnabled": true
+  }'
+```
+
+### Current state
+
+- SES identity `cyndibot.jessitron.honeydemo.io`: pending DKIM verification (DNS records just submitted).
+- Route 53 change `/change/C09348254DEPDCSWONNL` submitted; propagates in ~60s.
+- S3 bucket `cyndibot-incoming-emails` live, private, SES can PutObject.
+- Receipt rule `cyndibot-inbound` enabled in active rule set `instruqt-email-ruleset`.
+- **SES sandbox still applies to *sending*** — outbound replies can only go to verified addresses until we request production access.

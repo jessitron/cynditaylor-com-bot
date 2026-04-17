@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REGION="us-west-2"
+
+echo "=== Route 53 hosted zones ==="
+aws route53 list-hosted-zones --output json \
+  | python3 -c "import json,sys; [print(z['Name'], z['Id']) for z in json.load(sys.stdin)['HostedZones']]"
+
+echo
+echo "=== SES email identities (${REGION}) ==="
+aws sesv2 list-email-identities --region "${REGION}" --output json \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('EmailIdentities') or 'none')"
+
+echo
+echo "=== SES receipt rule sets (${REGION}) ==="
+aws ses list-receipt-rule-sets --region "${REGION}" --output json \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('RuleSets') or 'none')"
+
+echo
+echo "=== SES active receipt rule set (${REGION}) ==="
+aws ses describe-active-receipt-rule-set --region "${REGION}" --output json 2>&1 \
+  | python3 -c "
+import json, sys
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+    meta = d.get('Metadata')
+    if meta is None:
+        print('no active rule set')
+    else:
+        print(meta)
+except Exception:
+    print(raw.strip())
+"

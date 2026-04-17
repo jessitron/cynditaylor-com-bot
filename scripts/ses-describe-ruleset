@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REGION="us-west-2"
+RULESET="${1:-instruqt-email-ruleset}"
+
+aws ses describe-receipt-rule-set \
+  --region "${REGION}" \
+  --rule-set-name "${RULESET}" \
+  --output json \
+  | python3 -m json.tool

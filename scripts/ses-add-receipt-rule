@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REGION="us-west-2"
+RULESET="${1:-instruqt-email-ruleset}"
+RULE_NAME="${2:-cyndibot-inbound}"
+RECIPIENT_DOMAIN="${3:-cyndibot.jessitron.honeydemo.io}"
+BUCKET="${4:-cyndibot-incoming-emails}"
+PREFIX="${5:-emails/}"
+
+echo "Rule set:    ${RULESET}"
+echo "Rule:        ${RULE_NAME}"
+echo "Recipient:   ${RECIPIENT_DOMAIN}"
+echo "Bucket:      ${BUCKET}"
+echo "Prefix:      ${PREFIX}"
+echo
+
+RULE_JSON=$(RULE_NAME="${RULE_NAME}" RECIPIENT_DOMAIN="${RECIPIENT_DOMAIN}" \
+           BUCKET="${BUCKET}" PREFIX="${PREFIX}" python3 - <<'PY'
+import json
+import os
+
+rule = {
+    "Name": os.environ["RULE_NAME"],
+    "Enabled": True,
+    "TlsPolicy": "Optional",
+    "Recipients": [os.environ["RECIPIENT_DOMAIN"]],
+    "Actions": [
+        {
+            "S3Action": {
+                "BucketName": os.environ["BUCKET"],
+                "ObjectKeyPrefix": os.environ["PREFIX"],
+            }
+        }
+    ],
+    "ScanEnabled": True,
+}
+print(json.dumps(rule))
+PY
+)
+
+aws ses create-receipt-rule \
+  --region "${REGION}" \
+  --rule-set-name "${RULESET}" \
+  --rule "${RULE_JSON}"
+
+echo "Rule created. Current rules in '${RULESET}':"
+aws ses describe-receipt-rule-set \
+  --region "${REGION}" \
+  --rule-set-name "${RULESET}" \
+  --output json \
+  | python3 -m json.tool

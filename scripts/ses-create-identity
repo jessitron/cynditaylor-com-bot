@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REGION="us-west-2"
+DOMAIN="${1:-cyndibot.jessitron.honeydemo.io}"
+
+echo "Creating SES email identity: ${DOMAIN} in ${REGION}"
+aws sesv2 create-email-identity \
+  --region "${REGION}" \
+  --email-identity "${DOMAIN}" \
+  --output json \
+  | python3 -m json.tool
+
+echo
+echo "Fetching DKIM tokens:"
+aws sesv2 get-email-identity \
+  --region "${REGION}" \
+  --email-identity "${DOMAIN}" \
+  --output json \
+  | python3 -m json.tool

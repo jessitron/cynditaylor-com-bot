@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REGION="us-west-2"
+DOMAIN="${1:-cyndibot.jessitron.honeydemo.io}"
+HOSTED_ZONE_ID="${2:-Z0975156EQFWS502JWNW}"
+
+echo "Domain:       ${DOMAIN}"
+echo "Hosted zone:  ${HOSTED_ZONE_ID}"
+echo "Region:       ${REGION}"
+echo
+
+# Pull DKIM tokens directly from SES so this stays idempotent.
+CHANGE_BATCH_JSON=$(
+  aws sesv2 get-email-identity \
+    --region "${REGION}" \
+    --email-identity "${DOMAIN}" \
+    --output json \
+  | DOMAIN="${DOMAIN}" REGION="${REGION}" python3 "$(dirname "$0")/_build_ses_change_batch.py"
+)
+
+echo "Change batch:"
+echo "${CHANGE_BATCH_JSON}" | python3 -m json.tool
+echo
+
+aws route53 change-resource-record-sets \
+  --hosted-zone-id "${HOSTED_ZONE_ID}" \
+  --change-batch "${CHANGE_BATCH_JSON}" \
+  --output json \
+  | python3 -m json.tool

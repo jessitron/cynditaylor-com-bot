@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REGION="us-west-2"
+BUCKET="${1:-cyndibot-incoming-emails}"
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+
+echo "Account: ${ACCOUNT_ID}"
+echo "Bucket:  ${BUCKET}"
+echo "Region:  ${REGION}"
+echo
+
+if aws s3api head-bucket --bucket "${BUCKET}" 2>/dev/null; then
+  echo "Bucket already exists — skipping create."
+else
+  echo "Creating bucket..."
+  aws s3api create-bucket \
+    --bucket "${BUCKET}" \
+    --region "${REGION}" \
+    --create-bucket-configuration LocationConstraint="${REGION}" \
+    --output json \
+    | python3 -m json.tool
+
+  # Block all public access.
+  aws s3api put-public-access-block \
+    --bucket "${BUCKET}" \
+    --public-access-block-configuration \
+      BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+fi
+
+# Bucket policy: allow SES service principal to PutObject, scoped to this account.
+POLICY_JSON=$(ACCOUNT_ID="${ACCOUNT_ID}" BUCKET="${BUCKET}" python3 - <<'PY'
+import json
+import os
+
+account = os.environ["ACCOUNT_ID"]
+bucket = os.environ["BUCKET"]
+
+policy = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowSESInboundWrite",
+            "Effect": "Allow",
+            "Principal": {"Service": "ses.amazonaws.com"},
+            "Action": "s3:PutObject",
+            "Resource": f"arn:aws:s3:::{bucket}/*",
+            "Condition": {"StringEquals": {"aws:SourceAccount": account}},
+        }
+    ],
+}
+print(json.dumps(policy))
+PY
+)
+
+echo "Applying bucket policy:"
+echo "${POLICY_JSON}" | python3 -m json.tool
+
+aws s3api put-bucket-policy \
+  --bucket "${BUCKET}" \
+  --policy "${POLICY_JSON}"
+
+echo "Bucket policy applied."
