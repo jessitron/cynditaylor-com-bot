@@ -5,6 +5,8 @@ description = "SMS-driven agent that edits the cynditaylor-com static site."
 requires-python = ">=3.11"
 dependencies = [
     "boto3>=1.35.0",
+    "opentelemetry-sdk>=1.27.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.27.0",
 ]
 
 [tool.uv]
