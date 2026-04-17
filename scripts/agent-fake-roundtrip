@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# End-to-end dev-loop smoke test:
+#   1. Stage a fake inbound email from smoketest@cyndibot... in S3.
+#   2. Run the agent on that S3 key (it has parse_inbound + send_reply).
+#   3. Print Phoenix trace URL; the agent's reply will also land in S3
+#      (since the From is at the same verified domain) and can be viewed
+#      with scripts/ses-show-inbound.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source .env
+
+echo "=== Staging fake inbound in S3 ==="
+KEY=$(uv run python scripts/_stage_fake_inbound.py)
+echo "staged: s3://cyndibot-incoming-emails/${KEY}"
+echo
+
+echo "=== Running agent ==="
+uv run python -m agent.inbound "${KEY}"
+echo
+
+echo "=== Latest Phoenix trace ==="
+scripts/check-last-span

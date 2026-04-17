@@ -38,10 +38,17 @@
 3. ✅ `scripts/agent-inbound [s3_key]` — defaults to newest object in `s3://cyndibot-incoming-emails/emails/`, runs the agent, prints the Phoenix trace URL at the end.
 4. ✅ Smoke test passed: agent correctly identified a test email from `jessitron@gmail.com` with subject "does this work" and flagged the request as ambiguous. Trace landed in Phoenix under project `cynditaylor-com-bot`.
 
+## Current slice: agent replies via SES ✅
+
+1. ✅ `email_tools.send_reply_impl / send_reply` — boto3 `sesv2 send_email` with raw MIME, sets `From`, `To`, `Subject`, `In-Reply-To`, `References`. SES overrides client-set `Message-ID`, so tool returns just `ses_message_id`; the delivered message's ID is `<{ses_message_id}@us-west-2.amazonses.com>` — use that shape if we ever need to match replies to sent messages.
+2. ✅ Agent `inbound.py` now holds both tools and a prompt that drives parse → reply.
+3. ✅ `scripts/agent-fake-roundtrip` stages a synthetic inbound from `smoketest@cyndibot.jessitron.honeydemo.io`, runs the agent, and the agent's reply round-trips back into S3 via the existing receipt rule. Full dev loop, no external identity verification needed.
+
+**Sandbox reality (correcting earlier note):** account *is* in SES sandbox (`ProductionAccessEnabled: false`). Can only send to verified identities. The cyndibot domain is verified, which is why the self-loop works. For real replies to mom / Jessitron's gmail we need either `scripts/ses-verify-email <addr>` (adds an address identity, recipient must click the verification email) or production-access approval.
+
 ## After that (in order)
 
 1. More tools:
-   - `email.send_reply(to, subject, body, in_reply_to)` — via SES `SendEmail`.
    - `git.ensure_clone(repo_url)` + `git.reset_to_main()`
    - `git.commit_and_push(message)`
    - filesystem tools via `strands-agents-tools` (`file_read`, `file_write`, `shell`)
@@ -54,4 +61,4 @@
 
 - `.env` has no `GITHUB_TOKEN` populated yet. Needs to land before the git tools.
 - Do we want a **profile** file for long-lived facts about mom (preferences, spelling quirks), or skip until we see a real need?
-- SES sandbox: for outbound replies, only verified addresses can receive. Jessitron's own email is implicitly verified (it's the account owner), so dev loop works; production-access request happens before mom is live.
+- SES sandbox: dev loop is covered by the self-loop trick (send/receive within the verified cyndibot domain). Request production-access before mom goes live — or at minimum verify Jessitron's actual gmail so end-to-end "real mom email in → real reply out" is testable.
