@@ -7,7 +7,7 @@
 - **Repo strategy:** clone `cynditaylor-com` into AgentCore session storage at `/mnt/workspace/cynditaylor-com`, commit via shelled `git`. Reset to `origin/main` at start of each invoke.
 - **Session model:** one AgentCore `runtimeSessionId` per mom's phone number. 14-day idle TTL is plenty.
 - **Conversation memory:** no new store. Twilio Messages API (400-day retention) + git log on the site repo are authoritative. Strands `FileSessionManager` in session storage is convenience, not source of truth.
-- **Observability:** OTel → Arize Phoenix (self-hosted locally). `.env` has leftover Honeycomb config to delete/replace. Honeycomb may come later.
+- **Observability:** OTel → Arize Phoenix (self-hosted locally, `http://localhost:6006/v1/traces`). `.env` is now pointed at Phoenix. Honeycomb may come later.
 - **Build tooling:** `uv`.
 - **Site repo:** `github.com/jessitron/cynditaylor-com` (confirmed to exist).
 
@@ -35,5 +35,5 @@ Smallest first step that doesn't pretend to be AgentCore yet.
 
 ## Open questions
 
-- `.env` has no `GITHUB_TOKEN`, `TWILIO_*`, or `PHOENIX_*` populated yet. The current OTLP config is pointed at Honeycomb and needs to be rewritten for Phoenix before step 2.
+- `.env` has no `GITHUB_TOKEN` or `TWILIO_*` populated yet. These need to land before step 3.
 - Do we want a **profile** file for long-lived facts about mom (preferences, spelling quirks), or skip until we see a real need?

@@ -42,5 +42,5 @@ See README.md for the full architecture and the rationale in "Key decisions" (St
 
 ## Observability
 
-- **Arize Phoenix first** (self-hosted locally via docker). Honeycomb may come later.
-- `.env` currently has leftover Honeycomb OTLP config from another project — **ignore it for now**, it needs to be rewritten for Phoenix before we wire up OTel. Don't trust `.env`'s OTLP endpoint until that happens.
+- **Arize Phoenix first** (self-hosted locally via docker, default endpoint `http://localhost:6006/v1/traces`). Honeycomb may come later.
+- `.env` has the generic OTel vars (`OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at Phoenix, etc.) and is gitignored.
