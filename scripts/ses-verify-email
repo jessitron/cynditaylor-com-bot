@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Create an SES email-address identity so the sandbox will let us send to it.
+# SES sends the address a verification email; the recipient must click the link.
+set -euo pipefail
+
+REGION="us-west-2"
+EMAIL="${1:-}"
+
+if [[ -z "${EMAIL}" ]]; then
+  echo "usage: $0 <email-address>" >&2
+  exit 2
+fi
+
+echo "Creating email identity for ${EMAIL} in ${REGION}..."
+aws sesv2 create-email-identity \
+  --region "${REGION}" \
+  --email-identity "${EMAIL}" \
+  --output json
+
+echo
+echo "A verification email is on its way to ${EMAIL}. Click the link, then re-run:"
+echo "  scripts/ses-list-verified"
