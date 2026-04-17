@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BUCKET="${1:-cyndibot-incoming-emails}"
+PREFIX="${2:-emails/}"
+KEY="${3:-}"  # optional specific key; otherwise newest
+
+if [[ -z "${KEY}" ]]; then
+  KEY=$(aws s3api list-objects-v2 \
+          --bucket "${BUCKET}" \
+          --prefix "${PREFIX}" \
+          --output json \
+        | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+objs = sorted(d.get('Contents') or [], key=lambda o: o['LastModified'], reverse=True)
+if objs:
+    print(objs[0]['Key'])
+")
+  if [[ -z "${KEY}" ]]; then
+    echo "No objects in s3://${BUCKET}/${PREFIX}"
+    exit 0
+  fi
+fi
+
+echo "=== s3://${BUCKET}/${KEY} ==="
+aws s3 cp "s3://${BUCKET}/${KEY}" - 2>/dev/null

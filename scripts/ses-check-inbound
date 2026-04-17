@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REGION="us-west-2"
+DOMAIN="${1:-cyndibot.jessitron.honeydemo.io}"
+BUCKET="${2:-cyndibot-incoming-emails}"
+PREFIX="${3:-emails/}"
+
+echo "=== SES identity verification status ==="
+aws sesv2 get-email-identity \
+  --region "${REGION}" \
+  --email-identity "${DOMAIN}" \
+  --output json \
+  | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(f'  DKIM status:         {d[\"DkimAttributes\"][\"Status\"]}')
+print(f'  Verification status: {d[\"VerificationStatus\"]}')
+print(f'  Verified for sending: {d[\"VerifiedForSendingStatus\"]}')
+"
+
+echo
+echo "=== S3 inbound bucket contents (s3://${BUCKET}/${PREFIX}) ==="
+aws s3api list-objects-v2 \
+  --bucket "${BUCKET}" \
+  --prefix "${PREFIX}" \
+  --output json \
+  | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+objs = d.get('Contents') or []
+if not objs:
+    print('  (no objects yet)')
+else:
+    objs.sort(key=lambda o: o['LastModified'], reverse=True)
+    for o in objs[:10]:
+        print(f'  {o[\"LastModified\"]}  {o[\"Size\"]:>8} B  {o[\"Key\"]}')
+"
