@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PHOENIX_URL="http://localhost:6006"
+PROJECT_NAME="${1:-cynditaylor-com-bot}"
+
+read -r -d '' QUERY <<'GQL' || true
+{
+  "query": "{ projects { edges { node { id name spans(first: 100, sort: {col: startTime, dir: desc}) { edges { node { spanId parentId name spanKind startTime endTime statusCode trace { traceId } } } } } } } }"
+}
+GQL
+
+curl -s -X POST "${PHOENIX_URL}/graphql" \
+  -H "content-type: application/json" \
+  --data "${QUERY}" \
+  | python3 "$(dirname "$0")/_format_check_last_trace.py" "${PHOENIX_URL}" "${PROJECT_NAME}"
