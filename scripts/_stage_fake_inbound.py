@@ -32,14 +32,15 @@ def build_message(subject: str, body: str) -> bytes:
 
 
 def main() -> None:
-    subject = "Please update my website"
+    subject = "Home page tweak please"
     body = (
-        "Hi Cyndi,\n"
+        "Hi Cyndibot,\n"
         "\n"
-        "Please change the headline on the home page from \"Welcome\" to "
-        "\"Welcome, friends!\" when you get a chance.\n"
+        "On my home page, please change the big hero text "
+        "\"Capturing a Moment in Time\" to \"A Moment Captured Forever\".\n"
         "\n"
         "Thanks!\n"
+        "Cyndi\n"
     )
 
     key = f"{PREFIX}fake-{secrets.token_urlsafe(16)}"
