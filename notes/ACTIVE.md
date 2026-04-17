@@ -31,11 +31,12 @@
    - Verified: a real email from `jessitron@gmail.com` to `something@cyndibot.jessitron.honeydemo.io` landed in S3 in <1s, all SES verdicts (spam/virus/SPF/DKIM/DMARC) PASS.
    - All commands reproducible via `scripts/ses-*` and `scripts/route53-*`; raw commands logged in `infra/README.md`.
 
-## Next slice: agent reads the inbound email
+## Next slice: agent reads the inbound email ✅
 
-1. `scripts/ses-show-inbound` already cats a raw MIME from S3; complement with a structured parse.
-2. First agent tool: `email.parse_inbound(s3_key)` — pulls the object, returns `{from, to, subject, body_text, body_html, message_id, in_reply_to}`.
-3. Give the Strands agent just this tool; end-to-end: feed an s3 key, watch the agent describe what the email asks for.
+1. ✅ `agent/tools/email_tools.py::parse_inbound(s3_key)` — pulls raw MIME from S3, returns `{from, to, subject, body_text, body_html, message_id, in_reply_to}`. Uses stdlib `email` with `policy.default`.
+2. ✅ `agent/inbound.py`: Strands Agent with only `parse_inbound`. System prompt asks it to summarize sender / request / ambiguity without editing anything.
+3. ✅ `scripts/agent-inbound [s3_key]` — defaults to newest object in `s3://cyndibot-incoming-emails/emails/`, runs the agent, prints the Phoenix trace URL at the end.
+4. ✅ Smoke test passed: agent correctly identified a test email from `jessitron@gmail.com` with subject "does this work" and flagged the request as ambiguous. Trace landed in Phoenix under project `cynditaylor-com-bot`.
 
 ## After that (in order)
 
