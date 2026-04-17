@@ -7,43 +7,47 @@
 - **Repo strategy:** clone `cynditaylor-com` into AgentCore session storage at `/mnt/workspace/cynditaylor-com`, commit via shelled `git`. Reset to `origin/main` at start of each invoke.
 - **Session model:** one AgentCore `runtimeSessionId` per mom's email address. 14-day idle TTL is plenty.
 - **Conversation memory:** no new store. Inbound SES message (landing in S3) + SES sent-log + git log on the site repo are authoritative. Strands `FileSessionManager` in session storage is convenience, not source of truth.
-- **Observability:** OTel → Arize Phoenix (self-hosted locally, `http://localhost:6006/v1/traces`). `.env` is now pointed at Phoenix. Honeycomb may come later.
+- **Observability:** OTel → Arize Phoenix (self-hosted locally, `http://localhost:6006/v1/traces`). Honeycomb may come later.
 - **Build tooling:** `uv`.
 - **Site repo:** `github.com/jessitron/cynditaylor-com` (confirmed to exist).
+- **Intake channel:** email via SES (pivoted off Twilio SMS because US toll-free / 10DLC compliance was disproportionate for a 1:1 bot).
+- **Email domain:** `cyndibot.jessitron.honeydemo.io`, a subdomain of the Route 53 zone `jessitron.honeydemo.io.` (`Z0975156EQFWS502JWNW`).
 
 ## Done so far
 
 1. `pyproject.toml` + `uv`, `agent/hello.py` confirms Bedrock auth from Python.
-2. OTel → Phoenix wired; Bedrock auto-instrumented via `openinference-instrumentation-bedrock`.
-3. `hello.py` converted to a Strands Agent (no tools); 4-span traces land in Phoenix with correct OpenInference kinds (agent → chain → llm → chain).
-4. Twilio send API smoke-tested, then **abandoned** — US toll-free and 10DLC both require A2P verification paperwork that's not worth it for a 1:1 bot.
+2. OTel → Phoenix wired; Bedrock auto-instrumented via `openinference-instrumentation-bedrock`. Spans land under OpenInference project `cyndibot` (name from `OTEL_SERVICE_NAME`).
+3. `hello.py` converted to a Strands Agent (no tools); 4-span traces land in Phoenix with correct OpenInference kinds (agent → chain → llm → chain) via `StrandsAgentsToOpenInferenceProcessor`.
+4. Twilio send API smoke-tested, then **abandoned** — US toll-free and 10DLC both require A2P verification paperwork that's not worth it for a 1:1 bot. Scripts preserved in git history.
+5. `.env` untracked (was checked in by mistake); `.env.example` committed as the template.
+6. **SES inbound stood up end-to-end on `cyndibot.jessitron.honeydemo.io`:**
+   - SES domain identity, DKIM verified.
+   - Route 53: 3× DKIM CNAMEs + MX → `inbound-smtp.us-west-2.amazonaws.com` (priority 10).
+   - S3 bucket `cyndibot-incoming-emails` with SES-scoped `PutObject` policy, all public access blocked.
+   - Receipt rule `cyndibot-inbound` added to the existing active rule set `instruqt-email-ruleset` (single active rule set per region), scoped to recipient domain so it doesn't collide with the instruqt rule.
+   - Verified: a real email from `jessitron@gmail.com` to `something@cyndibot.jessitron.honeydemo.io` landed in S3 in <1s, all SES verdicts (spam/virus/SPF/DKIM/DMARC) PASS.
+   - All commands reproducible via `scripts/ses-*` and `scripts/route53-*`; raw commands logged in `infra/README.md`.
 
-## Pivot: SMS → SES email
+## Next slice: agent reads the inbound email
 
-Mom emails the bot instead of texting it. Drastically less carrier-compliance hassle. Scripts and notes from the Twilio detour are kept in git history for reference.
-
-## Next slice: email intake proof
-
-1. Decide the receiving address (see open questions). Verify the domain in SES (us-west-2).
-2. Create an SES receipt rule that stores inbound messages in an S3 bucket (later: invoke Lambda directly).
-3. From mom's email, send a test message; confirm the raw MIME lands in S3.
-4. Script: `scripts/ses-list-recent` that fetches the latest S3 object(s) and prints subject/from/body.
+1. `scripts/ses-show-inbound` already cats a raw MIME from S3; complement with a structured parse.
+2. First agent tool: `email.parse_inbound(s3_key)` — pulls the object, returns `{from, to, subject, body_text, body_html, message_id, in_reply_to}`.
+3. Give the Strands agent just this tool; end-to-end: feed an s3 key, watch the agent describe what the email asks for.
 
 ## After that (in order)
 
-1. Tools for the agent:
-   - `email.parse_inbound(s3_key)` — pull the MIME from S3, return structured fields.
+1. More tools:
    - `email.send_reply(to, subject, body, in_reply_to)` — via SES `SendEmail`.
    - `git.ensure_clone(repo_url)` + `git.reset_to_main()`
    - `git.commit_and_push(message)`
    - filesystem tools via `strands-agents-tools` (`file_read`, `file_write`, `shell`)
-2. End-to-end dry run: a local script feeds a fake inbound message to the agent, which produces a real commit on `cynditaylor-com` and a reply email (sandbox: to Jessitron only).
+2. End-to-end dry run: a local driver feeds a real inbound s3 key to the agent, which produces a real commit on `cynditaylor-com` and a reply email to Jessitron (SES sandbox only lets us send to verified addresses).
 3. AgentCore packaging: Dockerfile, ECR push, `create-agent-runtime` with `filesystemConfigurations.sessionStorage`. Log every command in `infra/README.md`.
-4. Lambda wired to SES receipt rule; Lambda invokes AgentCore. Session id = sender's email.
-5. Request SES production access so mom (and anyone else) can actually send email to the bot.
+4. Lambda wired to the SES receipt rule; Lambda invokes AgentCore. Session id = sender's email.
+5. Request SES production access so mom can actually send email to the bot.
 
 ## Open questions
 
-- **Receiving address:** `bot@cynditaylor.com`? `edits@cynditaylor.com`? Requires MX records for that domain (or subdomain) to point at SES. The domain's A/CNAME for GitHub Pages is independent of MX, so no conflict with the live site.
 - `.env` has no `GITHUB_TOKEN` populated yet. Needs to land before the git tools.
 - Do we want a **profile** file for long-lived facts about mom (preferences, spelling quirks), or skip until we see a real need?
+- SES sandbox: for outbound replies, only verified addresses can receive. Jessitron's own email is implicitly verified (it's the account owner), so dev loop works; production-access request happens before mom is live.
