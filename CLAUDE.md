@@ -31,4 +31,15 @@ See README.md for the full architecture and the rationale in "Key decisions" (St
 ## AWS
 
 - Use the **jessitron-sandbox** account, ID **414852377253**. Verify with `aws sts get-caller-identity` before running AWS commands.
+- Region: **us-west-2** (Bedrock model access confirmed here).
 - Setting up infra via `awscli` is fine. **CRUCIAL:** every AWS command that changes state must be recorded in `infra/README.md` so the setup is reproducible. Create that file if it doesn't exist.
+- `awscli` must be **≥2.30** to get the `bedrock-runtime converse` subcommand. Installed via asdf.
+
+## Bedrock
+
+- Default model: **Claude Sonnet 4.5**, inference-profile ID `us.anthropic.claude-sonnet-4-5-20250929-v1:0`. Bump to Opus (`us.anthropic.claude-opus-4-7`) only when Sonnet isn't enough.
+- **Gotcha:** the bare model ID (e.g. `anthropic.claude-sonnet-4-5-20250929-v1:0`) fails with "on-demand throughput isn't supported." Always use the cross-region inference-profile ID (prefixed `us.` or `global.`). List them with `aws bedrock list-inference-profiles --region us-west-2`.
+
+## Observability
+
+- `.env` is configured for **Honeycomb** via OTLP (`OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io:443`), not Arize Phoenix. The README is out of date on this — trust `.env`.
