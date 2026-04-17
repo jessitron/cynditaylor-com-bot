@@ -44,3 +44,4 @@ See README.md for the full architecture and the rationale in "Key decisions" (St
 
 - **Arize Phoenix first** (self-hosted locally via docker, default endpoint `http://localhost:6006/v1/traces`). Honeycomb may come later.
 - `.env` has the generic OTel vars (`OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at Phoenix, etc.) and is gitignored.
+- **After any test run that emits traces, report the Phoenix trace URL** so Jessitron can click through to it. `scripts/check-last-span` already prints the URL for the most recent span per project; use it (or an equivalent) to grab the URL. Format: `http://localhost:6006/projects/{projectId}/traces/{traceId}`.

@@ -5,11 +5,11 @@ PHOENIX_URL="http://localhost:6006"
 
 read -r -d '' QUERY <<'GQL' || true
 {
-  "query": "{ projects { edges { node { name traceCount spans(first: 1, sort: {col: startTime, dir: desc}) { edges { node { spanId name startTime statusCode attributes } } } } } } }"
+  "query": "{ projects { edges { node { id name traceCount spans(first: 1, sort: {col: startTime, dir: desc}) { edges { node { spanId name startTime statusCode trace { traceId } } } } } } } }"
 }
 GQL
 
 curl -s -X POST "${PHOENIX_URL}/graphql" \
   -H "content-type: application/json" \
-  --data "${QUERY}"
-echo
+  --data "${QUERY}" \
+  | python3 "$(dirname "$0")/_format_check_last_span.py" "${PHOENIX_URL}"
