@@ -27,3 +27,8 @@ See README.md for the full architecture and the rationale in "Key decisions" (St
 
 - Python 3.11+ target (devcontainer uses 3.12).
 - Secrets live in `.env` (gitignored and already populated locally); see README for the variable list.
+
+## AWS
+
+- Use the **jessitron-sandbox** account, ID **414852377253**. Verify with `aws sts get-caller-identity` before running AWS commands.
+- Setting up infra via `awscli` is fine. **CRUCIAL:** every AWS command that changes state must be recorded in `infra/README.md` so the setup is reproducible. Create that file if it doesn't exist.
