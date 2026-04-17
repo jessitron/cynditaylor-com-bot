@@ -4,3 +4,7 @@ __pycache__/
 chat_logs/
 conversation_history/
 .claude/settings.local.json
+.venv/
+*.egg-info/
+dist/
+build/
