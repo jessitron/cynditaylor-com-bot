@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source .env
+
+: "${TWILIO_ACCOUNT_SID:?must be set in .env}"
+: "${TWILIO_AUTH_TOKEN:?must be set in .env}"
+: "${TWILIO_FROM_NUMBER:?must be set in .env}"
+
+TO="${1:-+18777804236}"
+BODY="${2:-what does this do}"
+
+echo "POST Twilio Messages: From=${TWILIO_FROM_NUMBER}  To=${TO}  Body=\"${BODY}\""
+
+curl -sS -w "\nHTTP %{http_code}\n" \
+  "https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json" \
+  -X POST \
+  --data-urlencode "To=${TO}" \
+  --data-urlencode "From=${TWILIO_FROM_NUMBER}" \
+  --data-urlencode "Body=${BODY}" \
+  -u "${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}" \
+  | python3 "$(dirname "$0")/_format_twilio_response.py"
