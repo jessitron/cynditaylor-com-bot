@@ -1,6 +1,6 @@
 # Artist Website Update Agent
 
-An AI agent that updates a static HTML GitHub Pages site based on SMS messages. Built with Strands Agents on AWS AgentCore, instrumented via OpenTelemetry (Honeycomb).
+An AI agent that updates a static HTML GitHub Pages site based on SMS messages. Built with Strands Agents on AWS AgentCore, instrumented with Arize Phoenix via OpenTelemetry.
 
 ## Status: Hypothetical
 
@@ -37,7 +37,7 @@ AWS AgentCore Runtime          │
     │       ├── tool: commit + push (shelled git)
     │       └── tool: send_sms (Twilio)
     │
-    └── OpenTelemetry → Honeycomb  (observability)
+    └── OpenTelemetry → Arize Phoenix  (observability)
 ```
 
 | Concern | Choice |
@@ -49,7 +49,7 @@ AWS AgentCore Runtime          │
 | Webhook entry point | AWS Lambda |
 | Site hosting | GitHub Pages (static HTML) |
 | Site source | GitHub repo — cloned into AgentCore session storage, committed via shelled `git` |
-| Observability | OpenTelemetry → [Honeycomb](https://www.honeycomb.io/) |
+| Observability | [Arize Phoenix](https://phoenix.arize.com/) via OpenTelemetry + OpenInference |
 
 ## Project structure
 
@@ -90,9 +90,9 @@ GITHUB_REPO_OWNER=jessitron
 GITHUB_REPO_NAME=cynditaylor-com
 GITHUB_BRANCH=main
 
-# Honeycomb (OpenTelemetry)
-HONEYCOMB_API_KEY=
-# OTEL_* vars are set in .env; see that file
+# Arize Phoenix (OpenTelemetry)
+PHOENIX_API_KEY=        # leave empty if self-hosting
+PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
 ```
 
 ## Getting started
@@ -104,7 +104,7 @@ HONEYCOMB_API_KEY=
 - Twilio account
 - GitHub fine-grained personal access token with Contents: read+write on the site repo
 - Docker (for AgentCore deployment)
-- Honeycomb API key (for traces)
+- Arize Phoenix running locally: `docker run -p 6006:6006 -p 4317:4317 arizephoenix/phoenix:latest`
 
 ### Local development
 
@@ -119,7 +119,7 @@ cp .env.example .env
 python agent/agent.py "Change the phone number in the contact section to 555-1234"
 ```
 
-Traces will appear in Honeycomb under the `cynditaylor-com-bot` service.
+Traces will appear in Phoenix at http://localhost:6006.
 
 ### Deploy to AgentCore
 
@@ -137,13 +137,15 @@ docker build -t mom-site-agent .
 
 ## Observability
 
-Traces are sent to Honeycomb via OTLP. Every agent run produces a trace showing:
+Traces are instrumented via `openinference-instrumentation-bedrock` and sent to Phoenix via OTLP. Every agent run produces a trace showing:
 - The incoming SMS text
 - The recent Twilio conversation history pulled in as context
 - Which files were read / edited in the cloned repo
 - The LLM's reasoning and edits
 - The commit that was pushed
 - The SMS reply sent
+
+View traces at http://localhost:6006 (local Phoenix) or your hosted Phoenix instance.
 
 ## Key decisions
 
@@ -162,4 +164,4 @@ Long-lived facts about mom (preferences, spelling quirks) that don't belong in e
 
 **Why no confirmation step?** The site is low-risk. The agent makes the change, pushes it, and texts mom a confirmation. If something's wrong, she texts again — and the next invoke has the full Twilio thread as context.
 
-**Why Honeycomb (not Arize Phoenix)?** We already use Honeycomb at work and `.env` is set up for it. OTel-native, great at the "what did the agent actually do" question, no self-hosted container to keep running.
+**Why Arize Phoenix?** OTel-native, open source, self-hostable, and specifically good at the "what did the agent actually do" question — not just eval scores. Start here; we can add Honeycomb later if we want hosted/long-term storage.

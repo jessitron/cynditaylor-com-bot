@@ -42,4 +42,5 @@ See README.md for the full architecture and the rationale in "Key decisions" (St
 
 ## Observability
 
-- `.env` is configured for **Honeycomb** via OTLP (`OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io:443`), not Arize Phoenix. The README is out of date on this — trust `.env`.
+- **Arize Phoenix first** (self-hosted locally via docker). Honeycomb may come later.
+- `.env` currently has leftover Honeycomb OTLP config from another project — **ignore it for now**, it needs to be rewritten for Phoenix before we wire up OTel. Don't trust `.env`'s OTLP endpoint until that happens.

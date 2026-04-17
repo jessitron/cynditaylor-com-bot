@@ -7,8 +7,9 @@
 - **Repo strategy:** clone `cynditaylor-com` into AgentCore session storage at `/mnt/workspace/cynditaylor-com`, commit via shelled `git`. Reset to `origin/main` at start of each invoke.
 - **Session model:** one AgentCore `runtimeSessionId` per mom's phone number. 14-day idle TTL is plenty.
 - **Conversation memory:** no new store. Twilio Messages API (400-day retention) + git log on the site repo are authoritative. Strands `FileSessionManager` in session storage is convenience, not source of truth.
-- **Observability:** OTel → Honeycomb (not Phoenix; `.env` was already set up for Honeycomb).
-- **Build tooling:** `uv` (tentative — user hasn't confirmed).
+- **Observability:** OTel → Arize Phoenix (self-hosted locally). `.env` has leftover Honeycomb config to delete/replace. Honeycomb may come later.
+- **Build tooling:** `uv`.
+- **Site repo:** `github.com/jessitron/cynditaylor-com` (confirmed to exist).
 
 ## Next slice: local Bedrock hello-world
 
@@ -20,7 +21,7 @@ Smallest first step that doesn't pretend to be AgentCore yet.
 
 ## After that (in order)
 
-1. Wire OTel → Honeycomb in Python; confirm a span lands.
+1. Wire OTel → Phoenix (self-hosted locally) in Python; confirm a span lands at `localhost:6006`.
 2. Convert `hello.py` to a Strands Agent with no tools; confirm traces still flow.
 3. Add tools one at a time:
    - `twilio.get_recent_messages(phone_number, limit)`
@@ -34,7 +35,5 @@ Smallest first step that doesn't pretend to be AgentCore yet.
 
 ## Open questions
 
-- Does `cynditaylor-com` (the site repo) actually exist on GitHub? `.env.GITHUB_REPO_NAME` needs to be correct.
-- `.env` has no `GITHUB_TOKEN`, `TWILIO_*`, or `HONEYCOMB_API_KEY` populated yet. These need to land before step 3.
-- `uv` vs plain pip?
+- `.env` has no `GITHUB_TOKEN`, `TWILIO_*`, or `PHOENIX_*` populated yet. The current OTLP config is pointed at Honeycomb and needs to be rewritten for Phoenix before step 2.
 - Do we want a **profile** file for long-lived facts about mom (preferences, spelling quirks), or skip until we see a real need?
