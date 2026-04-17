@@ -102,6 +102,21 @@ def commit_site_changes_impl(message: str) -> dict[str, Any]:
     }
 
 
+def push_site_changes_impl(remote_branch: str = "main") -> dict[str, Any]:
+    """Push HEAD to origin/<remote_branch>. Defaults to main.
+
+    Relies on the local git credential helper for auth; no token
+    plumbing here. On auth failure, git exits non-zero and subprocess
+    raises -- the caller sees the original git stderr.
+    """
+    _run_git("push", "origin", f"HEAD:{remote_branch}")
+    return {
+        "pushed": True,
+        "remote_branch": remote_branch,
+        "head": _run_git("rev-parse", "HEAD").strip(),
+    }
+
+
 @tool
 def sync_workspace() -> dict[str, Any]:
     """Clone the site repo if needed, then reset it to origin/main.
@@ -149,8 +164,8 @@ def write_site_file(path: str, content: str) -> dict[str, Any]:
 def commit_site_changes(message: str) -> dict[str, Any]:
     """Stage all changes in the workspace and create a git commit.
 
-    Does NOT push. Use for local edits; a separate push step (not yet
-    wired up) is needed to publish.
+    Does NOT push. Use for local edits; a separate push step is needed
+    to publish to the live site.
 
     Args:
         message: Commit message. Should briefly describe what changed
@@ -161,3 +176,13 @@ def commit_site_changes(message: str) -> dict[str, Any]:
         porcelain-format files_changed summary.
     """
     return commit_site_changes_impl(message)
+
+
+@tool
+def push_site_changes() -> dict[str, Any]:
+    """Push the local main branch to origin/main. The live site at
+    cynditaylor.com will redeploy via GitHub Pages within a minute or so.
+
+    Only call this after commit_site_changes reports committed=True.
+    """
+    return push_site_changes_impl("main")
