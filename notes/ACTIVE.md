@@ -66,6 +66,69 @@
 2. ✅ `scripts/smoke-push-site` pushes HEAD to `origin/cyndibot-smoke-test`, verifies via `ls-remote`, deletes the branch. Auth path confirmed without touching `main`.
 3. Pending decision: when do we wire `push_site_changes` into `agent/inbound.py`? Current plan is to watch one manual main-push go through first.
 
+## Next slice: AgentCore Phase 1 — local container
+
+Goal: a Docker container serving AgentCore's HTTP contract locally, reusing all existing tools. Verify end-to-end before touching AWS. Detailed research notes (HTTP contract, IAM, session filesystem, SDK shape, source URLs) are in `notes/agentcore-contract.md` — read that first.
+
+Headline constraints from the contract:
+- Container is **`linux/arm64`** (matters for Docker build args if dev machine is Intel).
+- Serves `POST /invocations` + `GET /ping` on **`0.0.0.0:8080`**.
+- `runtimeSessionId` arrives as header `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`.
+- Session filesystem mounts at `/mnt/workspace` (locally simulate with a named Docker volume).
+- PyPI `bedrock-agentcore` package wraps all three concerns via `BedrockAgentCoreApp` + `@app.entrypoint` — use it.
+
+Steps:
+
+1. Add `bedrock-agentcore` to `pyproject.toml` dependencies; `uv sync`.
+2. Create `agent/server.py`:
+   - Import `BedrockAgentCoreApp` from `bedrock_agentcore`.
+   - `@app.entrypoint def invoke(payload): ...` that builds a Strands `Agent` with the same tools as `agent/inbound.py` and calls it with `payload["s3_key"]`. Return the agent's final message.
+   - `if __name__ == "__main__": app.run()`.
+   - Factor out the agent-construction code from `agent/inbound.py` into a shared helper so the CLI entrypoint and the server entrypoint don't drift.
+3. `Dockerfile` (at repo root):
+   - `FROM python:3.11-slim` (or `python:3.12-slim`, match `.venv`).
+   - `COPY pyproject.toml uv.lock ./` and `RUN pip install uv && uv sync --frozen --no-dev`.
+   - `COPY agent ./agent`.
+   - `ENV CYNDIBOT_WORKSPACE=/mnt/workspace/cynditaylor-com`.
+   - `ENV OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://host.docker.internal:6006/v1/traces` (overridable at runtime).
+   - `CMD ["python", "-m", "agent.server"]`.
+   - Target `linux/arm64`.
+4. `scripts/container-build` — `docker buildx build --platform linux/arm64 -t cyndibot:local .`. Print image size + tag.
+5. `scripts/container-run-local`:
+   - Create a named volume `cyndibot-workspace` (simulates `/mnt/workspace`).
+   - Run with `-p 8080:8080`, `-v cyndibot-workspace:/mnt/workspace`, `-v ~/.aws:/root/.aws:ro` (inherit user's AWS creds), `-e AWS_REGION=us-west-2`, `--env-file .env` (for `OTEL_*`).
+   - Print `curl` one-liners for `/ping` and `/invocations`.
+6. Smoke tests (separate scripts to keep commands out of chat):
+   - `scripts/container-smoke-ping` — `curl -fsS localhost:8080/ping`.
+   - `scripts/container-smoke-invoke` — `curl -X POST` with a payload containing the newest inbound S3 key (reuse `_pick_newest_inbound.py`). Verify agent runs, new reply lands in S3, Phoenix has a trace.
+7. Verify traces still reach Phoenix from inside the container. If `host.docker.internal` resolution is flaky on this Mac, fallback is `--add-host host.docker.internal:host-gateway`.
+
+Known gotchas to watch for:
+- **Git credentials inside container**: the local mac's macOS keychain helper is not available; `push_site_changes` will fail without a `GITHUB_TOKEN` in the container env. Don't trigger push tool from local-container tests; or set `GITHUB_TOKEN` in `.env` now and use `git config credential.helper store` in the Dockerfile. For AgentCore proper, pass the token via Secrets Manager.
+- **Cold-start timing**: Strands + boto3 + OTel is heavy. First `/invocations` may take 10-20s. AgentCore has a `/ping` health check — make sure the app starts the web server BEFORE constructing the Agent (lazy-initialize the Agent on first invoke), so `/ping` goes healthy fast.
+- **Session filesystem semantics**: locally the Docker volume persists between `docker run`s as long as we don't `--rm` the volume, matching AgentCore's per-session persistence. Document the invariant in a comment near `sync_workspace_impl`.
+
+## Slice after Phase 1: AgentCore Phase 2 — ship to AWS
+
+Only start this once Phase 1 smoke tests pass locally.
+
+1. Create ECR repo `cyndibot` in us-west-2. Log every aws-cli call in `infra/README.md`.
+2. `scripts/container-push-ecr` — authenticates docker to ECR, retags `cyndibot:local` → `<account>.dkr.ecr.us-west-2.amazonaws.com/cyndibot:latest`, pushes.
+3. Create IAM role `CyndibotAgentRuntime`:
+   - Trust: `bedrock-agentcore.amazonaws.com`, with `aws:SourceAccount=414852377253` + `aws:SourceArn` pattern for our account's runtimes.
+   - Baseline AgentCore permissions (see `notes/agentcore-contract.md` § IAM).
+   - Plus: `s3:GetObject`/`PutObject` on `cyndibot-incoming-emails/*`, `ses:SendEmail` for the bot From address, and (if push is enabled) `secretsmanager:GetSecretValue` on the GITHUB_TOKEN secret.
+   - Write role JSON to `infra/iam/cyndibot-agent-runtime-*.json` so it's reviewable.
+4. Store `GITHUB_TOKEN` in Secrets Manager (`cyndibot/github-token`). Update `site_tools.sync_workspace_impl` so it can pull the token from env (already works) but add a container-entrypoint shim that fetches the secret into env on boot.
+5. `aws bedrock-agentcore-control create-agent-runtime` with the shape from `notes/agentcore-contract.md`. Before running, `aws bedrock-agentcore-control create-agent-runtime help` to verify `filesystemConfigurations` is an accepted field.
+6. First cloud invoke: `aws bedrock-agentcore invoke-agent-runtime` (check exact subcommand name) with the newest real inbound s3 key. Verify reply lands in S3 + Phoenix/Honeycomb trace.
+
+## Slice after Phase 2: Lambda glue on SES receipt rule
+
+1. Lambda function that: parses SES notification → `mail.source`, `receipt.action.objectKey` → filters by recipient username (agent only fires for `cyndi@cyndibot...`; `pretend-*`, `smoketest-*`, etc. land in S3 but don't invoke) → calls `InvokeAgentRuntime` with `runtimeSessionId = mail.source` and payload `{"s3_key": objectKey}`. Returns fast.
+2. Add Lambda action to the existing `cyndibot-inbound` receipt rule, running AFTER the S3 action (S3 is still source-of-truth).
+3. End-to-end: pretend-mom → SES → S3 + Lambda → AgentCore → edit + push + reply. No local driver involved.
+
 ## After that (in order)
 3. AgentCore packaging: Dockerfile, ECR push, `create-agent-runtime` with `filesystemConfigurations.sessionStorage`. Log every command in `infra/README.md`.
 4. Lambda wired to the SES receipt rule; Lambda invokes AgentCore. Session id = sender's email.
