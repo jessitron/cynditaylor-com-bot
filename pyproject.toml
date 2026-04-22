@@ -10,6 +10,7 @@ dependencies = [
     "openinference-instrumentation-bedrock>=0.1.0",
     "strands-agents>=0.1.0",
     "openinference-instrumentation-strands-agents>=0.1.0",
+    "bedrock-agentcore>=0.1.0",
 ]
 
 [tool.uv]
