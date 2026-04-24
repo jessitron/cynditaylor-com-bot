@@ -104,3 +104,35 @@ aws ses create-receipt-rule \
 - S3 bucket `cyndibot-incoming-emails` live, private, SES can PutObject.
 - Receipt rule `cyndibot-inbound` enabled in active rule set `instruqt-email-ruleset`.
 - **SES sandbox still applies to *sending*** — outbound replies can only go to verified addresses until we request production access.
+
+## 2026-04-24 — ECR repo + first image push (AgentCore Phase 2 step 1)
+
+### Scripts
+
+```bash
+scripts/container-build       # docker buildx --platform linux/arm64 --load -> cyndibot:local
+scripts/container-push-ecr    # ecr login, tag cyndibot:local as <acct>.dkr.ecr...:latest, docker push
+```
+
+### Commands run (state-changing)
+
+```bash
+# 1. Create ECR repo (scan-on-push, mutable tags so :latest moves).
+aws ecr create-repository \
+  --repository-name cyndibot \
+  --region us-west-2 \
+  --image-scanning-configuration scanOnPush=true \
+  --image-tag-mutability MUTABLE
+
+# 2. Authenticate + tag + push (via scripts/container-push-ecr).
+aws ecr get-login-password --region us-west-2 \
+  | docker login --username AWS --password-stdin 414852377253.dkr.ecr.us-west-2.amazonaws.com
+docker tag cyndibot:local 414852377253.dkr.ecr.us-west-2.amazonaws.com/cyndibot:latest
+docker push 414852377253.dkr.ecr.us-west-2.amazonaws.com/cyndibot:latest
+```
+
+### Current state
+
+- ECR repo `cyndibot` (`arn:aws:ecr:us-west-2:414852377253:repository/cyndibot`).
+- Image `cyndibot:latest` pushed. Digest `sha256:7a84e51c...dfea70`, 133 MB, OCI image index.
+- linux/arm64 only (AgentCore requires arm64).

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+ACCOUNT="414852377253"
+REGION="us-west-2"
+REPO="cyndibot"
+LOCAL_TAG="cyndibot:local"
+REMOTE_TAG="${ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${REPO}:latest"
+
+if ! docker image inspect "${LOCAL_TAG}" >/dev/null 2>&1; then
+  echo "image ${LOCAL_TAG} not found; run scripts/container-build first" >&2
+  exit 1
+fi
+
+echo "authenticating docker to ECR (${REGION})..."
+aws ecr get-login-password --region "${REGION}" \
+  | docker login --username AWS --password-stdin "${ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com"
+
+echo "tagging ${LOCAL_TAG} -> ${REMOTE_TAG}"
+docker tag "${LOCAL_TAG}" "${REMOTE_TAG}"
+
+echo "pushing ${REMOTE_TAG}..."
+docker push "${REMOTE_TAG}"
+
+echo
+echo "pushed: ${REMOTE_TAG}"
