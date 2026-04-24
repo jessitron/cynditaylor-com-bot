@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source .env
+
+KEY=$(uv run python scripts/_stage_smoke_greeting.py)
+
+echo "=== POST /invocations with s3_key=${KEY} ==="
+echo
+
+PAYLOAD=$(python3 -c "import json, sys; print(json.dumps({'s3_key': sys.argv[1]}))" "${KEY}")
+
+curl -fsS -X POST http://localhost:8080/invocations \
+  -H "Content-Type: application/json" \
+  -H "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id: local-smoke@example" \
+  -d "${PAYLOAD}"
+echo
+echo
+
+echo "=== Latest Phoenix trace ==="
+scripts/check-last-span

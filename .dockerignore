@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+build/
+.git/
+cynditaylor-com/
+chat_logs/
+conversation_history/
+.claude/
+.be/
+notes/
+scripts/
+infra/
+*.md
+.env
+.env.*

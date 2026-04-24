@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEADLINE=$(( $(date +%s) + 60 ))
+
+until curl -fsS http://localhost:8080/ping >/dev/null 2>&1; do
+  if (( $(date +%s) >= DEADLINE )); then
+    echo "container did not become ready within 60s" >&2
+    exit 1
+  fi
+  sleep 1
+done
+
+echo "container is ready"
+curl -fsS http://localhost:8080/ping
+echo

@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+VOLUME_NAME="cyndibot-workspace"
+IMAGE="cyndibot:local"
+
+if ! docker volume inspect "${VOLUME_NAME}" >/dev/null 2>&1; then
+  docker volume create "${VOLUME_NAME}" >/dev/null
+  echo "created docker volume ${VOLUME_NAME} (simulates AgentCore /mnt/workspace)"
+fi
+
+# Docker's --env-file doesn't understand shell syntax: no `export`, no comments,
+# no blanks, no quoted values. Render a docker-compatible env file from .env.
+ENV_FILE=$(mktemp -t cyndibot-env.XXXXXX)
+trap 'rm -f "${ENV_FILE}"' EXIT
+grep -v '^[[:space:]]*#' .env \
+  | grep -v '^[[:space:]]*$' \
+  | sed -E 's/^[[:space:]]*export[[:space:]]+//' \
+  | sed -E "s/^([A-Za-z_][A-Za-z0-9_]*)=\"(.*)\"$/\1=\2/" \
+  | sed -E "s/^([A-Za-z_][A-Za-z0-9_]*)='(.*)'$/\1=\2/" \
+  > "${ENV_FILE}"
+
+echo "starting ${IMAGE} on http://localhost:8080"
+echo "  scripts/container-wait-ready       -> poll /ping until Healthy"
+echo "  scripts/container-smoke-ping       -> GET /ping"
+echo "  scripts/container-smoke-invoke     -> POST /invocations with newest inbound"
+echo "  docker stop cyndibot-local         -> stop it"
+echo
+
+exec docker run --rm \
+  --name cyndibot-local \
+  -p 8080:8080 \
+  -v "${VOLUME_NAME}:/mnt/workspace" \
+  -v "${HOME}/.aws:/root/.aws:ro" \
+  --env-file "${ENV_FILE}" \
+  -e AWS_REGION=us-west-2 \
+  -e AWS_DEFAULT_REGION=us-west-2 \
+  -e AWS_PROFILE="${AWS_PROFILE:-sandbox}" \
+  -e OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://host.docker.internal:6006/v1/traces \
+  -e OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:6006 \
+  "${IMAGE}"

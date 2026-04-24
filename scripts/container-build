@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+TAG="cyndibot:local"
+
+docker buildx build --platform linux/arm64 --load -t "${TAG}" .
+
+SIZE=$(docker image inspect "${TAG}" --format '{{.Size}}')
+python3 -c "print(f'Built ${TAG} — {${SIZE}/1024/1024:.1f} MB')"
