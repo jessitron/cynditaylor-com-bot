@@ -136,3 +136,48 @@ docker push 414852377253.dkr.ecr.us-west-2.amazonaws.com/cyndibot:latest
 - ECR repo `cyndibot` (`arn:aws:ecr:us-west-2:414852377253:repository/cyndibot`).
 - Image `cyndibot:latest` pushed. Digest `sha256:7a84e51c...dfea70`, 133 MB, OCI image index.
 - linux/arm64 only (AgentCore requires arm64).
+
+## 2026-04-24 — IAM role for the AgentCore runtime (Phase 2 step 3)
+
+Policy documents live in `infra/iam/` so they're reviewable:
+
+- `infra/iam/cyndibot-agent-runtime-trust.json` — trust policy.
+- `infra/iam/cyndibot-agent-runtime-policy.json` — inline permissions.
+
+### Trust model
+
+- Principal: `bedrock-agentcore.amazonaws.com`.
+- Conditions: `aws:SourceAccount = 414852377253` + `aws:SourceArn` LIKE `arn:aws:bedrock-agentcore:us-west-2:414852377253:runtime/*` (confused-deputy prevention).
+
+### Inline permissions (`CyndibotAgentRuntimeInline`)
+
+| Statement | Why |
+| --- | --- |
+| EcrPullImage | Pull the container image from our ECR repo. |
+| CloudWatchLogs (`/aws/bedrock-agentcore/runtimes/*`) | Runtime logs. |
+| XRayTracing | Baseline AgentCore requirement. |
+| CloudWatchMetrics (ns `bedrock-agentcore`) | Runtime metrics. |
+| AgentCoreWorkloadIdentity | `GetWorkloadAccessToken*` — baseline AgentCore. |
+| BedrockClaudeInvoke | Invoke/converse on Anthropic foundation models + `us.anthropic.*` inference profiles in our account. |
+| InboundMailBucket | `s3:GetObject` on `cyndibot-incoming-emails/*` — read inbound emails. |
+| SesSendFromBot | `ses:SendEmail` + `SendRawEmail` on the `cyndibot.jessitron.honeydemo.io` identity. |
+
+### Commands run (state-changing)
+
+```bash
+aws iam create-role \
+  --role-name CyndibotAgentRuntime \
+  --assume-role-policy-document file://infra/iam/cyndibot-agent-runtime-trust.json \
+  --description "Execution role for the cyndibot AgentCore runtime"
+
+aws iam put-role-policy \
+  --role-name CyndibotAgentRuntime \
+  --policy-name CyndibotAgentRuntimeInline \
+  --policy-document file://infra/iam/cyndibot-agent-runtime-policy.json
+```
+
+### Current state
+
+- Role ARN: `arn:aws:iam::414852377253:role/CyndibotAgentRuntime`.
+- No SES production access request yet — sandbox rules still apply. For first cloud invoke this is fine because both sender and recipient are on the verified `cyndibot.jessitron.honeydemo.io` domain.
+- No Secrets Manager entry yet for `GITHUB_TOKEN`; we'll add it only when we need `push_site_changes` to work in the cloud.
