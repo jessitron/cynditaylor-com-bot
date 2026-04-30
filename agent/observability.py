@@ -1,9 +1,6 @@
 import os
 
 from openinference.instrumentation.bedrock import BedrockInstrumentor
-from openinference.instrumentation.strands_agents import (
-    StrandsAgentsToOpenInferenceProcessor,
-)
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
@@ -16,9 +13,6 @@ def configure_tracing() -> None:
         {"openinference.project.name": os.environ["OTEL_SERVICE_NAME"]}
     )
     provider = TracerProvider(resource=resource)
-
-    # Mutate Strands' GenAI spans into OpenInference format before they're exported.
-    provider.add_span_processor(StrandsAgentsToOpenInferenceProcessor())
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 
     trace.set_tracer_provider(provider)
