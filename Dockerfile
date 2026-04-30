@@ -17,6 +17,7 @@ ENV PATH="/app/.venv/bin:${PATH}"
 ENV PYTHONUNBUFFERED=1
 ENV CYNDIBOT_WORKSPACE=/mnt/workspace/cynditaylor-com
 ENV OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://host.docker.internal:6006/v1/traces
+ENV OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental
 
 EXPOSE 8080
 
