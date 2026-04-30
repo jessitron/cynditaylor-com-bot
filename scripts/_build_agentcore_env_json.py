@@ -23,6 +23,11 @@ def main() -> None:
         "OTEL_EXPORTER_OTLP_HEADERS": (
             f"x-honeycomb-team={os.environ['HONEYCOMB_API_KEY']}"
         ),
+        "OTEL_SEMCONV_STABILITY_OPT_IN": "gen_ai_latest_experimental",
+        # Trips Strands' is_langfuse heuristic (substring match on "langfuse")
+        # so gen_ai.{input,output}.messages land on span attributes for Honeycomb,
+        # in addition to the span events the spec mandates.
+        "LANGFUSE_BASE_URL": "langfuse-stub-for-honeycomb",
         "AWS_REGION": "us-west-2",
         "AWS_DEFAULT_REGION": "us-west-2",
         "CYNDIBOT_WORKSPACE": "/mnt/workspace/cynditaylor-com",
