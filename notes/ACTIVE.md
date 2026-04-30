@@ -88,20 +88,21 @@ Goal: a Docker container serving AgentCore's HTTP contract locally, reusing all 
 - `push_site_changes` will fail inside the container — no macOS keychain credential helper. Either set `GITHUB_TOKEN` in `.env` + `git config --global credential.helper store` in the Dockerfile, or in AgentCore proper pull from Secrets Manager on boot. Current smoke test avoids exercising push by using a greeting message.
 - The Dockerfile's `FROM python:3.12-slim` doesn't match the host's `.venv` (Python 3.14.2). `uv sync --frozen` succeeded so the lock is cross-version compatible, but worth remembering when touching deps.
 
-## Slice after Phase 1: AgentCore Phase 2 — ship to AWS
+## Slice: AgentCore Phase 2 — ship to AWS ✅ (greeting payload)
 
-Only start this once Phase 1 smoke tests pass locally.
+**Outcome:** `cyndibot:latest` runs as AgentCore runtime `cyndibot-o2gGSvB6Hz` in us-west-2. End-to-end greeting flow verified: `invoke-agent-runtime` → `parse_inbound` from S3 → Bedrock converse → `send_reply` via SES → trace in Honeycomb team `modernity`, env `cynditaylor-com-bot` (trace_id `6cb81cf8137235c43ac1c2f6ced9f428`, 12 spans, 13.7s).
 
-1. Create ECR repo `cyndibot` in us-west-2. Log every aws-cli call in `infra/README.md`.
-2. `scripts/container-push-ecr` — authenticates docker to ECR, retags `cyndibot:local` → `<account>.dkr.ecr.us-west-2.amazonaws.com/cyndibot:latest`, pushes.
-3. Create IAM role `CyndibotAgentRuntime`:
-   - Trust: `bedrock-agentcore.amazonaws.com`, with `aws:SourceAccount=414852377253` + `aws:SourceArn` pattern for our account's runtimes.
-   - Baseline AgentCore permissions (see `notes/agentcore-contract.md` § IAM).
-   - Plus: `s3:GetObject`/`PutObject` on `cyndibot-incoming-emails/*`, `ses:SendEmail` for the bot From address, and (if push is enabled) `secretsmanager:GetSecretValue` on the GITHUB_TOKEN secret.
-   - Write role JSON to `infra/iam/cyndibot-agent-runtime-*.json` so it's reviewable.
-4. Store `GITHUB_TOKEN` in Secrets Manager (`cyndibot/github-token`). Update `site_tools.sync_workspace_impl` so it can pull the token from env (already works) but add a container-entrypoint shim that fetches the secret into env on boot.
-5. `aws bedrock-agentcore-control create-agent-runtime` with the shape from `notes/agentcore-contract.md`. Before running, `aws bedrock-agentcore-control create-agent-runtime help` to verify `filesystemConfigurations` is an accepted field.
-6. First cloud invoke: `aws bedrock-agentcore invoke-agent-runtime` (check exact subcommand name) with the newest real inbound s3 key. Verify reply lands in S3 + Phoenix/Honeycomb trace.
+Done:
+1. ECR repo `cyndibot` in us-west-2; `cyndibot:local` pushed to `:latest` (sha256:7a84e51c...).
+2. IAM role `CyndibotAgentRuntime` with confused-deputy-safe trust + scoped inline policy. JSON in `infra/iam/`.
+3. `scripts/agentcore-create` boots the runtime; `environmentVariables` carry the OTel config (Honeycomb endpoint + ingest key from `.env`), region, and `CYNDIBOT_WORKSPACE`.
+4. `scripts/agentcore-wait-ready` polls `get-agent-runtime` until `status=READY`.
+5. `scripts/agentcore-smoke-invoke` stages a greeting via `_stage_smoke_greeting.py` and `invoke-agent-runtime`s the runtime.
+
+**Not yet done in Phase 2 (deferred):**
+- `GITHUB_TOKEN` in Secrets Manager + container-entrypoint shim. Deferred until we want to exercise `push_site_changes` from the cloud.
+- A real "edit a file" cloud smoke test. Greeting payload validates the path; first edit-and-commit invoke will be the next slice.
+- SES production access request — still in sandbox, so cyndibot can only reply to verified addresses.
 
 ## Slice after Phase 2: Lambda glue on SES receipt rule
 

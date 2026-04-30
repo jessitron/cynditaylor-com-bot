@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+REGION="us-west-2"
+RUNTIME_ID="${1:-cyndibot-o2gGSvB6Hz}"
+RUNTIME_ARN="arn:aws:bedrock-agentcore:${REGION}:414852377253:runtime/${RUNTIME_ID}"
+SESSION_ID="smoke-first-cloud-invoke-$(date +%s)-cyndibot-runtime"
+
+echo "=== staging greeting-style inbound in S3 ==="
+KEY=$(uv run python scripts/_stage_smoke_greeting.py)
+echo "s3_key: ${KEY}"
+echo
+
+PAYLOAD_FILE=$(mktemp -t cyndibot-payload.XXXXXX.json)
+OUT_FILE=$(mktemp -t cyndibot-invoke-out.XXXXXX.bin)
+trap 'rm -f "${PAYLOAD_FILE}" "${OUT_FILE}"' EXIT
+
+python3 -c 'import json,sys; json.dump({"s3_key": sys.argv[1]}, open(sys.argv[2], "w"))' \
+  "${KEY}" "${PAYLOAD_FILE}"
+
+echo "=== invoking runtime ==="
+echo "  arn:     ${RUNTIME_ARN}"
+echo "  session: ${SESSION_ID}"
+echo
+
+aws bedrock-agentcore invoke-agent-runtime \
+  --region "${REGION}" \
+  --agent-runtime-arn "${RUNTIME_ARN}" \
+  --runtime-session-id "${SESSION_ID}" \
+  --content-type application/json \
+  --payload "fileb://${PAYLOAD_FILE}" \
+  "${OUT_FILE}"
+
+echo
+echo "=== response ==="
+cat "${OUT_FILE}"
+echo

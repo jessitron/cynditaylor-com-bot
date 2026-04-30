@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source .env
+
+ACCOUNT="414852377253"
+REGION="us-west-2"
+RUNTIME_NAME="cyndibot"
+ROLE_ARN="arn:aws:iam::${ACCOUNT}:role/CyndibotAgentRuntime"
+IMAGE_URI="${ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/cyndibot:latest"
+
+ENV_JSON=$(python3 scripts/_build_agentcore_env_json.py)
+
+ARTIFACT_JSON=$(python3 -c 'import json,sys; print(json.dumps({"containerConfiguration":{"containerUri": sys.argv[1]}}))' "${IMAGE_URI}")
+NETWORK_JSON='{"networkMode":"PUBLIC"}'
+FS_JSON='[{"sessionStorage":{"mountPath":"/mnt/workspace"}}]'
+
+echo "creating AgentCore runtime '${RUNTIME_NAME}' in ${REGION}..."
+echo "  image: ${IMAGE_URI}"
+echo "  role:  ${ROLE_ARN}"
+echo
+
+aws bedrock-agentcore-control create-agent-runtime \
+  --region "${REGION}" \
+  --agent-runtime-name "${RUNTIME_NAME}" \
+  --agent-runtime-artifact "${ARTIFACT_JSON}" \
+  --role-arn "${ROLE_ARN}" \
+  --network-configuration "${NETWORK_JSON}" \
+  --environment-variables "${ENV_JSON}" \
+  --filesystem-configurations "${FS_JSON}" \
+  --description "Cyndibot — edits cynditaylor-com in response to SES inbound email"
