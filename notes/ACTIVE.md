@@ -119,6 +119,7 @@ Tracked separately in `notes/TELEMETRY.md` — Honeycomb-friendly tracing is don
 - `GITHUB_TOKEN` in Secrets Manager + container-entrypoint shim. Required before `push_site_changes` works in the cloud.
 - Real "edit a file" cloud smoke test (greeting payload only validated the parse+reply path).
 - SES production access request so mom can actually send email to the bot.
+- **Unreplyable-recipient error visibility.** When the agent tries to `send_reply` to an address SES can't deliver to (sandbox: unverified identity; prod: hard bounce), the current tool returns `success` as long as the SES API call returns a Message-ID — silent failure from the agent's POV. Test by sending an inbound from an unverified address, then verify we surface the failure somewhere actionable (SES bounce SNS topic? agent-side preflight check against verified identities? a "delivery failed" reply to a fallback address?). Discovered when the first real-mom-style email landed in Gmail spam — different failure mode but same observability gap.
 
 ## Open questions
 
