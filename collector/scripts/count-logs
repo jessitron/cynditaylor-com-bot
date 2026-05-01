@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Count CloudWatch log lines per invocation. Runs the smoke twice (so the
+# second hits a warm container), then breaks down line counts by category.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+START_TS=$(date +%s)000
+
+echo "==> smoke #1 (likely warm if recent activity, cold otherwise)"
+scripts/smoke >/dev/null 2>&1 || true
+
+echo "==> waiting 5s, then smoke #2 (warm)"
+sleep 5
+scripts/smoke >/dev/null 2>&1 || true
+
+echo "==> waiting 10s for logs to surface in CloudWatch..."
+sleep 10
+
+aws logs filter-log-events \
+  --log-group-name "/aws/lambda/${COLLECTOR_NAME}" \
+  --region "${AWS_REGION}" \
+  --start-time "${START_TS}" \
+  --query 'events[].message' \
+  --output json \
+  | python3 scripts/_classify_logs.py

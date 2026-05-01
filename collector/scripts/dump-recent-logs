@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Pull last N minutes of logs raw, one line per row.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+WINDOW="${1:-2m}"
+
+case "${WINDOW}" in
+  *m) MINUTES="${WINDOW%m}";;
+  *)  MINUTES=2;;
+esac
+START_TS=$(($(date +%s) * 1000 - MINUTES * 60 * 1000))
+
+aws logs filter-log-events \
+  --log-group-name "/aws/lambda/${COLLECTOR_NAME}" \
+  --region "${AWS_REGION}" \
+  --start-time "${START_TS}" \
+  --query 'events[].message' \
+  --output json \
+  | python3 scripts/_dump_logs.py
