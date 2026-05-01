@@ -16,6 +16,9 @@ URL=$(aws lambda get-function-url-config \
         --region "${AWS_REGION}" \
         --query FunctionUrl --output text)
 
-python3 scripts/_send_smoke_otlp.py \
+# Uses uv (walks up to find pyproject.toml) to pick up opentelemetry-sdk +
+# opentelemetry-exporter-otlp-proto-http. If reusing this module in a project
+# without uv, install those packages and swap to `python3` directly.
+uv run python scripts/_send_smoke_otlp.py \
   --endpoint "${URL}v1/traces" \
   --token "${INGEST_BEARER_TOKEN}"

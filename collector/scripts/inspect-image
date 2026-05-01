@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Print architecture + key file info from the built image. Sanity check after
+# multi-arch build surprises.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+LOCAL_TAG="${COLLECTOR_NAME}:local"
+
+echo "==> manifest arch:"
+docker image inspect "${LOCAL_TAG}" --format '{{.Architecture}}/{{.Os}}'
+echo
+echo "==> apk add file, then check binary arch:"
+docker run --rm --entrypoint /bin/sh "${LOCAL_TAG}" -c \
+  'apk add --no-cache file >/dev/null && file /app/otelcol-contrib /opt/extensions/lambda-adapter'

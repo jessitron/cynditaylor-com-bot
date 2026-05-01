@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Run the collector container locally for debugging. Skips LWA — connects to
+# the OTLP receiver directly on port 4318. Stub env vars; we just want the
+# collector to start.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+LOCAL_TAG="${COLLECTOR_NAME}:local"
+
+docker run --rm \
+  -p 4318:4318 \
+  -e HONEYCOMB_API_KEY=stub \
+  -e HONEYCOMB_OTLP_ENDPOINT=https://stub.example.com \
+  -e INGEST_BEARER_TOKEN=stub \
+  "${LOCAL_TAG}"

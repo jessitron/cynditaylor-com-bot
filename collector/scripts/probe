@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Probe the deployed function URL with curl. Helps disambiguate "403 from
+# Lambda URL gate" vs "401/403 from collector's bearertokenauth" vs
+# "400 from collector parsing".
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+# shellcheck disable=SC1091
+source ./.env
+
+URL=$(aws lambda get-function-url-config \
+        --function-name "${COLLECTOR_NAME}" \
+        --region "${AWS_REGION}" \
+        --query FunctionUrl --output text)
+
+echo "==> 1. no auth header — expect 401 from collector or 403 from URL"
+curl -sS -o /dev/null -w 'status=%{http_code}\n' \
+  -X POST "${URL}v1/traces" \
+  -H 'Content-Type: application/x-protobuf' \
+  --data-binary 'x'
+
+echo "==> 2. wrong bearer — expect 401 from collector"
+curl -sS -o /dev/null -w 'status=%{http_code}\n' \
+  -X POST "${URL}v1/traces" \
+  -H 'Content-Type: application/x-protobuf' \
+  -H 'Authorization: Bearer wrong-token' \
+  --data-binary 'x'
+
+echo "==> 3. correct bearer + bogus body — expect 400 from collector OTLP parse"
+curl -sS -o /dev/null -w 'status=%{http_code}\n' \
+  -X POST "${URL}v1/traces" \
+  -H 'Content-Type: application/x-protobuf' \
+  -H "Authorization: Bearer ${INGEST_BEARER_TOKEN}" \
+  --data-binary 'x'
+
+echo "==> 4. verbose dump of #3 to see what Lambda is saying"
+curl -v -X POST "${URL}v1/traces" \
+  -H 'Content-Type: application/x-protobuf' \
+  -H "Authorization: Bearer ${INGEST_BEARER_TOKEN}" \
+  --data-binary 'x' 2>&1 | grep -E '^[<>]'

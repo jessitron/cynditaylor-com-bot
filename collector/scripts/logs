@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Tail the collector Lambda's CloudWatch logs.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+LOG_GROUP="/aws/lambda/${COLLECTOR_NAME}"
+SINCE="${1:-5m}"
+
+aws logs tail "${LOG_GROUP}" \
+  --region "${AWS_REGION}" \
+  --since "${SINCE}" \
+  --format short

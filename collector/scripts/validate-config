@@ -17,7 +17,7 @@ if ! docker image inspect "${LOCAL_TAG}" >/dev/null 2>&1; then
 fi
 
 # Stub the env vars the config references; values don't matter for validation.
-docker run --rm --entrypoint /otelcol-contrib \
+docker run --rm --entrypoint /app/otelcol-contrib \
   -e HONEYCOMB_API_KEY=stub \
   -e HONEYCOMB_OTLP_ENDPOINT=https://stub.example.com \
   -e INGEST_BEARER_TOKEN=stub \

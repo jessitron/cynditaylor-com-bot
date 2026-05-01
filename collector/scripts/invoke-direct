@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Invoke the Lambda directly via the control plane (bypasses Function URL).
+# Confirms whether the container itself is healthy.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+OUT=$(mktemp)
+trap 'rm -f "${OUT}"' EXIT
+
+# LWA expects an API Gateway-style proxy event when invoked directly.
+PAYLOAD=$(python3 -c '
+import base64, json
+print(json.dumps({
+    "version": "2.0",
+    "rawPath": "/v1/traces",
+    "requestContext": {"http": {"method": "POST", "path": "/v1/traces"}},
+    "headers": {
+        "content-type": "application/x-protobuf",
+        "authorization": "Bearer dummy",
+    },
+    "body": base64.b64encode(b"x").decode(),
+    "isBase64Encoded": True,
+}))
+')
+
+aws lambda invoke \
+  --function-name "${COLLECTOR_NAME}" \
+  --region "${AWS_REGION}" \
+  --cli-binary-format raw-in-base64-out \
+  --payload "${PAYLOAD}" \
+  "${OUT}" \
+  --output json
+
+echo
+echo "--- response body ---"
+cat "${OUT}"
+echo

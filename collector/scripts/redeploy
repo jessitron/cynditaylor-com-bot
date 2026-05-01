@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Build → push → deploy → smoke. Convenience for the inner-loop iteration.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+scripts/build
+scripts/validate-config
+scripts/push-ecr
+scripts/deploy
+echo
+echo "waiting 5s for Lambda to register the new image..."
+sleep 5
+scripts/smoke
