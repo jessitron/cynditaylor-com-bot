@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-In progress, partially built. **`notes/ACTIVE.md` is the source of truth for what exists vs. what's planned** — read it before assuming anything about layout or current state.
+In progress, partially built. **`notes/ACTIVE.md` is the source of truth for what exists vs. what's planned** — read it before assuming anything about layout or current state. Telemetry work (OTel/Phoenix/Honeycomb shape) is a separate line of work tracked in **`notes/TELEMETRY.md`**.
 
 Built: local Strands agent (`agent/cyndibot.py`, `agent/inbound.py`), full OTel → Phoenix and → Honeycomb, SES inbound + outbound end-to-end on `cyndibot.jessitron.honeydemo.io`, site-edit tools (`agent/tools/site_tools.py`) with clone/sync/edit/commit, AgentCore runtime deployed (`cyndibot-o2gGSvB6Hz` in us-west-2), local container parity.
 
@@ -46,8 +46,7 @@ See README.md for the full architecture and the rationale in "Key decisions" (St
 
 ## Observability
 
-- **Local dev: Arize Phoenix** (self-hosted via docker, endpoint `http://localhost:6006/v1/traces`). Started by `./run`.
-- **Cloud (AgentCore runtime): Honeycomb**, team `modernity`, env `cynditaylor-com-bot`. Endpoint + ingest key are passed as AgentCore `environmentVariables`.
-- Bedrock spans are auto-instrumented by `openinference-instrumentation-bedrock`. Strands' own GenAI spans land as queryable columns (`gen_ai.usage.*`, `gen_ai.{input,output}.messages`, etc.) — see the `notes/skills/strands-honeycomb-tracing/SKILL.md` skill for the exact env vars and the `is_langfuse` trick that makes Honeycomb's AI view work.
-- `.env` has all the OTel vars locally and is gitignored.
+Tracked as a separate line of work in **`notes/TELEMETRY.md`** — current shape, what's done, what's next. Two load-bearing rules to repeat here:
+
 - **After any test run that emits traces, report the trace URL** so Jessitron can click through. Locally: `scripts/check-last-span` / `scripts/check-last-trace` print URLs of the form `http://localhost:6006/projects/{projectId}/traces/{traceId}`. For cloud runs, surface the Honeycomb trace ID from the AgentCore invoke output.
+- Phoenix runs locally (`http://localhost:6006/v1/traces`, started by `./run`); Honeycomb is the cloud target (team `modernity`, env `cynditaylor-com-bot`). All OTel env vars live in the gitignored `.env`.

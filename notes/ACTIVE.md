@@ -104,37 +104,11 @@ Done:
 - A real "edit a file" cloud smoke test. Greeting payload validates the path; first edit-and-commit invoke will be the next slice.
 - SES production access request — still in sandbox, so cyndibot can only reply to verified addresses.
 
-## Slice: Honeycomb-friendly tracing ✅
+## Telemetry work
 
-End-of-session shape: Strands' OTel telemetry now lands in Honeycomb (team `modernity`, env `cynditaylor-com-bot`) as queryable individual columns (`gen_ai.usage.*`, `gen_ai.server.{time_to_first_token,request.duration}`, `gen_ai.tool.*`, `gen_ai.{input,output}.messages` on real spans) instead of an opaque `metadata` JSON blob. Three changes were load-bearing:
+Tracked separately in `notes/TELEMETRY.md` — Honeycomb-friendly tracing is done; the next telemetry slice (drop redundant span events) lives there. Touch it independently of the agent slices below.
 
-1. Removed `openinference-instrumentation-strands-agents` and its `StrandsAgentsToOpenInferenceProcessor`. The processor was bundling unmapped attrs into a single JSON `metadata` column that Honeycomb couldn't query. Phoenix lost its chat-style UI in exchange — acceptable since cloud is the production target. `BedrockInstrumentor` from `openinference-instrumentation-bedrock` stays, since it writes OpenInference attrs natively (no translation phase).
-2. Set `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` so Strands emits `gen_ai.input.messages`/`output.messages` JSON arrays (Honeycomb AI view shape) instead of legacy per-message events.
-3. Set `LANGFUSE_BASE_URL=langfuse-stub-for-honeycomb` to trip Strands' `is_langfuse` heuristic — substring `"langfuse"` is what matters (the rest is documentation). With the flag tripped, Strands also calls `span.set_attributes(...)` for those JSON arrays alongside `span.add_event(...)`. Without the trip, messages live only on span events; Honeycomb's columnar queries can't reach them.
-
-`scripts/_probe_strands_langfuse.py` — 5-line check that confirms `is_langfuse` and `use_latest_genai_conventions` are both `True` without sending a trace. Useful to flip first when something's wrong.
-
-The full setup (with traps and verification queries) is captured as a Claude Code skill at `notes/skills/strands-honeycomb-tracing/SKILL.md` so other agents can replicate it.
-
-## Next slice: drop the redundant span events
-
-Currently each LLM-call span in Honeycomb has both:
-- the JSON-encoded `gen_ai.{input,output}.messages` attrs on the span (good, queryable)
-- the `gen_ai.client.inference.operation.details` span events that carry the same payload (redundant — they show up in Honeycomb as separate rows with `name=gen_ai.client.inference.operation.details, duration_ms=0`)
-
-Goal: consolidate. Two sub-questions for this slice:
-
-1. **Cheap version:** custom OTel `SpanProcessor` whose `on_end` walks `span.events`, hoists any unique event-attrs onto the span itself (with a prefix like `event.<event_name>.<attr>` to avoid collisions). Doesn't drop the events; just makes sure no field is event-only.
-2. **Full version:** wrap the OTLP exporter so it filters span events out of the serialized payload before send. Events on a `ReadableSpan` are immutable at `on_end` time — must intercept later. The OTLP exporter does its own serialization in `OTLPSpanExporter.export()`; subclass it or wrap it with an exporter-decorator pattern.
-
-Reference points to read in `strands-agents`:
-- `strands/telemetry/tracer.py:241` (`_add_event`) — the `to_span_attributes` knob.
-- `strands/telemetry/tracer.py:114` (`is_langfuse`) — the heuristic we're tripping.
-- All call sites with `to_span_attributes=self.is_langfuse`: lines 357, 417, 472, 563, 660, 766, 842, 864.
-
-Do (1) first, see if Honeycomb is happy without the events being filtered out (they're cheap to ignore in queries — just `WHERE duration_ms > 0`). If event noise is actually hurting, do (2).
-
-## Slice after that: Lambda glue on SES receipt rule
+## Next slice: Lambda glue on SES receipt rule
 
 1. Lambda function that: parses SES notification → `mail.source`, `receipt.action.objectKey` → filters by recipient username (agent only fires for `cyndi@cyndibot...`; `pretend-*`, `smoketest-*`, etc. land in S3 but don't invoke) → calls `InvokeAgentRuntime` with `runtimeSessionId = mail.source` and payload `{"s3_key": objectKey}`. Returns fast.
 2. Add Lambda action to the existing `cyndibot-inbound` receipt rule, running AFTER the S3 action (S3 is still source-of-truth).
