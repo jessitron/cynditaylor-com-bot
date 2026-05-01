@@ -32,22 +32,26 @@ processors:
       spanevent:
         - 'true'
 
-  batch:
-    send_batch_size: 100
-    timeout: 1s
+  # No batch processor: under Lambda's freeze-after-invocation lifecycle, batched
+  # spans sit in memory until the next cold start (or get lost). Synchronous
+  # export per request is correct here.
 
 exporters:
   otlphttp/honeycomb:
     endpoint: ${env:HONEYCOMB_OTLP_ENDPOINT}
     headers:
       x-honeycomb-team: ${env:HONEYCOMB_API_KEY}
+    # Disable async queue for the same reason: we want the OTLP POST to Honeycomb
+    # to complete before this Lambda invocation returns.
+    sending_queue:
+      enabled: false
 
 service:
   extensions: [bearertokenauth/ingest]
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [transform/lift_event_attrs, filter/drop_empty_events, batch]
+      processors: [transform/lift_event_attrs, filter/drop_empty_events]
       exporters: [otlphttp/honeycomb]
   telemetry:
     logs:

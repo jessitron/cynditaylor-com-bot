@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Flip the function URL to AWS_IAM, send a sigv4-signed request, see if it
+# works. If yes, the issue is an org SCP blocking auth_type=NONE specifically.
+# If no, it's something else.
+#
+# Restores AuthType to NONE on exit.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+restore() {
+  echo
+  echo "==> restoring URL to AuthType=NONE"
+  aws lambda update-function-url-config \
+    --function-name "${COLLECTOR_NAME}" \
+    --auth-type NONE \
+    --region "${AWS_REGION}" >/dev/null
+}
+trap restore EXIT
+
+echo "==> flipping URL to AWS_IAM"
+aws lambda update-function-url-config \
+  --function-name "${COLLECTOR_NAME}" \
+  --auth-type AWS_IAM \
+  --region "${AWS_REGION}" >/dev/null
+
+# Add invoke permission for our current caller, scoped to AWS_IAM auth.
+ROLE_ARN=$(aws sts get-caller-identity --query Arn --output text)
+echo "==> caller: ${ROLE_ARN}"
+
+# Drop any prior IAM-auth statement, then add fresh.
+aws lambda remove-permission \
+  --function-name "${COLLECTOR_NAME}" \
+  --statement-id FunctionURLAllowSelf \
+  --region "${AWS_REGION}" >/dev/null 2>&1 || true
+
+aws lambda add-permission \
+  --function-name "${COLLECTOR_NAME}" \
+  --statement-id FunctionURLAllowSelf \
+  --action lambda:InvokeFunctionUrl \
+  --principal "*" \
+  --function-url-auth-type AWS_IAM \
+  --region "${AWS_REGION}" >/dev/null
+
+URL=$(aws lambda get-function-url-config \
+        --function-name "${COLLECTOR_NAME}" \
+        --region "${AWS_REGION}" \
+        --query FunctionUrl --output text)
+
+# Pull current creds into env so curl --aws-sigv4 can pick them up.
+eval "$(aws configure export-credentials --format env)"
+export AWS_REGION
+
+sleep 3
+
+echo
+echo "==> sigv4-signed POST"
+curl -sS -i -X POST "${URL}v1/traces" \
+  --aws-sigv4 "aws:amz:${AWS_REGION}:lambda" \
+  --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
+  -H "x-amz-security-token: ${AWS_SESSION_TOKEN:-}" \
+  -H 'Content-Type: application/x-protobuf' \
+  --data-binary 'x' \
+  | head -10

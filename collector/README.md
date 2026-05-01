@@ -121,5 +121,16 @@ Filter drops items where the condition is true. `'true'` is unconditional — ev
 ## Limitations
 
 - **No cross-invocation buffer.** Each Lambda invocation processes whatever the producer sent in that batch and exits. If Honeycomb is briefly 5xx-ing, the in-Lambda retry queue dies with the process. Producer-side `BatchSpanProcessor` retries cover most of this.
-- **Cold start ~1–2 s.** Invisible to the user (export is async on the producer) but adds tail latency to the very first export after idle.
+- **Cold start ~4–5 s on first request.** Invisible to the user (export is async on the producer) but adds tail latency to the very first export after idle. Subsequent invocations are 2–4 ms.
 - **Traces only.** Add `metrics` / `logs` pipelines in `config.yaml` if needed.
+
+## Gotchas (paid in blood, recorded for future-me)
+
+These are not optional reading if you're adapting this module — each one cost an hour of debugging.
+
+1. **`auth_type=NONE` Function URLs need TWO permission statements**, not one. As of October 2025, `lambda:InvokeFunctionUrl` alone is no longer sufficient — you also need `lambda:InvokeFunction` with `--invoked-via-function-url`. Without the second statement, every request gets 403 `AccessDeniedException` at the URL gate with NO log lines anywhere — Lambda doesn't even invoke the container. `scripts/deploy` adds both.
+2. **No batch processor, no async sending queue.** Lambda freezes the container after the invocation handler returns. Anything sitting in `batch` or `sending_queue` never flushes. Synchronous export is the only correct shape. The `decouple` processor from the `opentelemetry-lambda` distro is the "real" fix but isn't in `otel/opentelemetry-collector-contrib`.
+3. **Distroless contrib image doesn't work as a Lambda base.** The official `otel/opentelemetry-collector-contrib` image runs as `USER 10001` and has no `/etc/passwd`, both of which Lambda's container runtime trips over. Stage the binary into Alpine.
+4. **Use `CMD` only, NOT `ENTRYPOINT` + `CMD`.** Lambda treats CMD-only and ENTRYPOINT+CMD container images differently for boot purposes. With ENTRYPOINT set, the main process never starts; with CMD only, it does. (Don't fully understand why — observed across three base-image variants.)
+5. **`--provenance=false --sbom=false` on `docker buildx`.** Default buildx output is OCI image manifest with attestations, which Lambda rejects with `InvalidParameterValueException: image manifest ... is not supported`. The build script sets these.
+6. **Remember the bearer token in `OTEL_EXPORTER_OTLP_HEADERS`** uses lowercase `authorization=Bearer <token>`. The OTel collector's `bearertokenauth` extension is case-insensitive on the header name but the token value is not.

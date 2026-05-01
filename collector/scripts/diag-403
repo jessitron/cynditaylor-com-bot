@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Diagnose why the function URL returns 403 AccessDeniedException.
+#
+# Tries several angles:
+#   - account-level Lambda public-access-block (if any)
+#   - org SCPs blocking lambda:InvokeFunctionUrl
+#   - flip URL to AWS_IAM, send sigv4-signed request from current creds
+#   - check whether ANY function URL works in this account
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+echo "=== 1. Lambda public-access-block at account level (if API exists) ==="
+aws lambda list-functions --max-items 0 --region "${AWS_REGION}" >/dev/null
+# These commands were added in newer Lambda APIs; tolerant of "operation not found".
+aws lambda get-public-access-block-config --region "${AWS_REGION}" 2>&1 || true
+
+echo
+echo "=== 2. Identity ==="
+aws sts get-caller-identity
+
+echo
+echo "=== 3. Org info (best-effort; may be denied by IAM) ==="
+aws organizations describe-organization 2>&1 | head -20 || true
+aws organizations list-policies-for-target \
+  --target-id "$(aws sts get-caller-identity --query Account --output text)" \
+  --filter SERVICE_CONTROL_POLICY 2>&1 | head -40 || true
+
+echo
+echo "=== 4. Try sigv4 invoke against the (currently NONE) URL ==="
+URL=$(aws lambda get-function-url-config \
+        --function-name "${COLLECTOR_NAME}" \
+        --region "${AWS_REGION}" \
+        --query FunctionUrl --output text)
+HOST=$(python3 -c 'import sys, urllib.parse as u; print(u.urlparse(sys.argv[1]).netloc)' "${URL}")
+echo "URL host: ${HOST}"
+
+# AWS CLI 2.30+ has --aws-sigv4 in plain `aws` invoke equivalent? No — easiest is to
+# flip to AWS_IAM, sigv4 with curl, then flip back.
+
+echo
+echo "=== 5. Flipping URL to AWS_IAM temporarily ==="
+aws lambda update-function-url-config \
+  --function-name "${COLLECTOR_NAME}" \
+  --auth-type AWS_IAM \
+  --region "${AWS_REGION}" >/dev/null
+sleep 2
+
+echo "=== 6. Sigv4-signed POST to ${URL}v1/traces ==="
+curl -sS -o /dev/null -w 'sigv4-status=%{http_code}\n' \
+  --aws-sigv4 "aws:amz:${AWS_REGION}:lambda" \
+  --user "$(aws configure export-credentials --format env-no-export 2>/dev/null \
+    | python3 -c '
+import sys
+env = dict(line.split("=", 1) for line in sys.stdin.read().strip().splitlines() if "=" in line)
+print(f"{env[\"AWS_ACCESS_KEY_ID\"]}:{env[\"AWS_SECRET_ACCESS_KEY\"]}")
+')" \
+  -H "x-amz-security-token: $(aws configure export-credentials --format env-no-export 2>/dev/null | python3 -c '
+import sys
+env = dict(line.split("=", 1) for line in sys.stdin.read().strip().splitlines() if "=" in line)
+print(env.get("AWS_SESSION_TOKEN", ""))
+')" \
+  -H 'Content-Type: application/x-protobuf' \
+  -X POST "${URL}v1/traces" \
+  --data-binary 'x'
+
+echo
+echo "=== 7. Flipping URL back to NONE ==="
+aws lambda update-function-url-config \
+  --function-name "${COLLECTOR_NAME}" \
+  --auth-type NONE \
+  --region "${AWS_REGION}" >/dev/null
+echo "done. URL restored to NONE."

@@ -74,12 +74,23 @@ else
     --auth-type NONE \
     --region "${AWS_REGION}" \
     >/dev/null
+  # Function URLs with auth_type=NONE require BOTH lambda:InvokeFunctionUrl
+  # AND lambda:InvokeFunction to be granted (October 2025 change). Missing the
+  # second one yields 403 AccessDeniedException at the URL gate with no logs.
   aws lambda add-permission \
     --function-name "${COLLECTOR_NAME}" \
-    --statement-id FunctionURLAllowPublic \
+    --statement-id FunctionURLAllowInvokeUrl \
     --action lambda:InvokeFunctionUrl \
     --principal '*' \
     --function-url-auth-type NONE \
+    --region "${AWS_REGION}" \
+    >/dev/null
+  aws lambda add-permission \
+    --function-name "${COLLECTOR_NAME}" \
+    --statement-id FunctionURLAllowInvoke \
+    --action lambda:InvokeFunction \
+    --principal '*' \
+    --invoked-via-function-url \
     --region "${AWS_REGION}" \
     >/dev/null
 fi

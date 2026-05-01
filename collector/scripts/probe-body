@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Probe the URL and show the full response body — the 403 has a JSON body
+# explaining why.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+URL=$(aws lambda get-function-url-config \
+        --function-name "${COLLECTOR_NAME}" \
+        --region "${AWS_REGION}" \
+        --query FunctionUrl --output text)
+
+echo "=== POST with no auth, full response ==="
+curl -sS -i -X POST "${URL}v1/traces" \
+  -H 'Content-Type: application/x-protobuf' \
+  --data-binary 'x'
+echo
+echo
+echo "=== GET / no headers, full response ==="
+curl -sS -i "${URL}"
