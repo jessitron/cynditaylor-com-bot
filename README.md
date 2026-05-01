@@ -71,7 +71,7 @@ cynditaylor-com-bot/
 ├── lambda/               # (planned) SES → AgentCore invocation
 ├── infra/
 │   └── README.md         # running log of every AWS setup command
-├── scripts/              # run, check, SES + Route 53 + S3 + Twilio (historical)
+├── scripts/              # run, check, SES, Route 53, S3, agent invokers, AgentCore deploy
 ├── Dockerfile            # (planned) AgentCore Runtime container
 ├── pyproject.toml
 ├── notes/ACTIVE.md       # plan and state of play
