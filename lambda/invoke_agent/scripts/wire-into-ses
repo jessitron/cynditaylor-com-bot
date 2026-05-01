@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Wire the dispatcher Lambda into the cyndibot-inbound SES receipt rule.
+#
+#   1. Add a resource policy on the Lambda granting ses.amazonaws.com:InvokeFunction
+#      (SES validates this when we update the receipt rule, so it must come first).
+#   2. update-receipt-rule to set Actions = [existing S3Action, new LambdaAction].
+#      InvocationType=Event so SES doesn't wait for the agent's ~14s run.
+#
+# Idempotent — re-running is safe.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+LAMBDA_ARN="arn:aws:lambda:${AWS_REGION}:${ACCOUNT}:function:${LAMBDA_NAME}"
+PERMISSION_SID="ses-invoke-${LAMBDA_NAME}"
+
+echo "==> account ${ACCOUNT}, region ${AWS_REGION}"
+echo "==> lambda ${LAMBDA_ARN}"
+echo "==> ses ruleset ${SES_RULESET}, rule ${SES_RULE_NAME}"
+echo
+
+# 1. Lambda resource policy for SES.
+if aws lambda get-policy \
+      --function-name "${LAMBDA_NAME}" \
+      --region "${AWS_REGION}" \
+      --output text \
+      --query 'Policy' 2>/dev/null \
+   | grep -q "\"Sid\":\"${PERMISSION_SID}\""; then
+  echo "permission: ${PERMISSION_SID} already attached"
+else
+  echo "permission: granting ses.amazonaws.com lambda:InvokeFunction"
+  aws lambda add-permission \
+    --function-name "${LAMBDA_NAME}" \
+    --region "${AWS_REGION}" \
+    --statement-id "${PERMISSION_SID}" \
+    --action lambda:InvokeFunction \
+    --principal ses.amazonaws.com \
+    --source-account "${ACCOUNT}" \
+    >/dev/null
+fi
+
+# 2. update-receipt-rule with both actions.
+RULE_JSON=$(LAMBDA_ARN="${LAMBDA_ARN}" \
+  RULE_NAME="${SES_RULE_NAME}" \
+  RECIPIENT_DOMAIN="${SES_RECIPIENT_DOMAIN}" \
+  BUCKET="${INBOUND_BUCKET}" \
+  PREFIX="${INBOUND_PREFIX}" \
+  python3 - <<'PY'
+import json
+import os
+
+rule = {
+    "Name": os.environ["RULE_NAME"],
+    "Enabled": True,
+    "TlsPolicy": "Optional",
+    "Recipients": [os.environ["RECIPIENT_DOMAIN"]],
+    "Actions": [
+        {
+            "S3Action": {
+                "BucketName": os.environ["BUCKET"],
+                "ObjectKeyPrefix": os.environ["PREFIX"],
+            }
+        },
+        {
+            "LambdaAction": {
+                "FunctionArn": os.environ["LAMBDA_ARN"],
+                "InvocationType": "Event",
+            }
+        },
+    ],
+    "ScanEnabled": True,
+}
+print(json.dumps(rule))
+PY
+)
+
+echo "rule: updating ${SES_RULE_NAME} with [S3Action, LambdaAction]"
+aws ses update-receipt-rule \
+  --region "${AWS_REGION}" \
+  --rule-set-name "${SES_RULESET}" \
+  --rule "${RULE_JSON}"
+
+echo
+echo "current rule:"
+aws ses describe-receipt-rule \
+  --region "${AWS_REGION}" \
+  --rule-set-name "${SES_RULESET}" \
+  --rule-name "${SES_RULE_NAME}" \
+  --output json \
+  | python3 -m json.tool
+
+echo
+echo "wire-into-ses complete."

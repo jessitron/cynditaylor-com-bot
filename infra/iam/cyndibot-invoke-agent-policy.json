@@ -1,0 +1,27 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-west-2:414852377253:log-group:/aws/lambda/cyndibot-invoke-agent",
+        "arn:aws:logs:us-west-2:414852377253:log-group:/aws/lambda/cyndibot-invoke-agent:*"
+      ]
+    },
+    {
+      "Sid": "InvokeAgentRuntime",
+      "Effect": "Allow",
+      "Action": "bedrock-agentcore:InvokeAgentRuntime",
+      "Resource": [
+        "arn:aws:bedrock-agentcore:us-west-2:414852377253:runtime/cyndibot-o2gGSvB6Hz",
+        "arn:aws:bedrock-agentcore:us-west-2:414852377253:runtime/cyndibot-o2gGSvB6Hz/*"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Tear everything down in the reverse order of bootstrap/deploy/wire-into-ses.
+# Receipt rule reverts to S3-only (the cyndibot-inbound rule is preserved so
+# raw inbound capture keeps working), Lambda + role + log group are deleted.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+
+echo "==> account ${ACCOUNT}, region ${AWS_REGION}"
+echo
+
+# 1. Revert receipt rule to S3-only (drop the LambdaAction).
+RULE_JSON=$(RULE_NAME="${SES_RULE_NAME}" \
+  RECIPIENT_DOMAIN="${SES_RECIPIENT_DOMAIN}" \
+  BUCKET="${INBOUND_BUCKET}" \
+  PREFIX="${INBOUND_PREFIX}" \
+  python3 - <<'PY'
+import json
+import os
+
+rule = {
+    "Name": os.environ["RULE_NAME"],
+    "Enabled": True,
+    "TlsPolicy": "Optional",
+    "Recipients": [os.environ["RECIPIENT_DOMAIN"]],
+    "Actions": [
+        {"S3Action": {"BucketName": os.environ["BUCKET"], "ObjectKeyPrefix": os.environ["PREFIX"]}},
+    ],
+    "ScanEnabled": True,
+}
+print(json.dumps(rule))
+PY
+)
+
+echo "ses: reverting ${SES_RULE_NAME} to S3-only"
+aws ses update-receipt-rule \
+  --region "${AWS_REGION}" \
+  --rule-set-name "${SES_RULESET}" \
+  --rule "${RULE_JSON}" \
+  || echo "  (continuing despite error)"
+
+# 2. Delete Lambda function (CloudWatch log group lingers; we delete it explicitly).
+if aws lambda get-function --function-name "${LAMBDA_NAME}" --region "${AWS_REGION}" >/dev/null 2>&1; then
+  echo "lambda: deleting function ${LAMBDA_NAME}"
+  aws lambda delete-function \
+    --function-name "${LAMBDA_NAME}" \
+    --region "${AWS_REGION}"
+else
+  echo "lambda: function ${LAMBDA_NAME} not found"
+fi
+
+LOG_GROUP="/aws/lambda/${LAMBDA_NAME}"
+if aws logs describe-log-groups \
+     --log-group-name-prefix "${LOG_GROUP}" \
+     --region "${AWS_REGION}" \
+     --query 'logGroups[0].logGroupName' \
+     --output text 2>/dev/null \
+   | grep -q "^${LOG_GROUP}$"; then
+  echo "logs: deleting log group ${LOG_GROUP}"
+  aws logs delete-log-group \
+    --log-group-name "${LOG_GROUP}" \
+    --region "${AWS_REGION}"
+else
+  echo "logs: log group ${LOG_GROUP} not found"
+fi
+
+# 3. Detach inline policy + delete role.
+if aws iam get-role --role-name "${LAMBDA_ROLE_NAME}" >/dev/null 2>&1; then
+  echo "iam: deleting inline policy + role ${LAMBDA_ROLE_NAME}"
+  aws iam delete-role-policy \
+    --role-name "${LAMBDA_ROLE_NAME}" \
+    --policy-name CyndibotInvokeAgentInline \
+    || echo "  (policy already gone)"
+  aws iam delete-role \
+    --role-name "${LAMBDA_ROLE_NAME}"
+else
+  echo "iam: role ${LAMBDA_ROLE_NAME} not found"
+fi
+
+echo
+echo "delete complete."

@@ -109,16 +109,19 @@ Done:
 
 Tracked separately in `notes/TELEMETRY.md` — Honeycomb-friendly tracing is done; the next telemetry slice (drop redundant span events) lives there. Touch it independently of the agent slices below.
 
-## Next slice: Lambda glue on SES receipt rule
+## Slice: Lambda glue on SES receipt rule ✅
 
-1. Lambda function that: parses SES notification → `mail.source`, `receipt.action.objectKey` → filters by recipient username (agent only fires for `cyndi@cyndibot...`; `pretend-*`, `smoketest-*`, etc. land in S3 but don't invoke) → calls `InvokeAgentRuntime` with `runtimeSessionId = mail.source` and payload `{"s3_key": objectKey}`. Returns fast.
-2. Add Lambda action to the existing `cyndibot-inbound` receipt rule, running AFTER the S3 action (S3 is still source-of-truth).
-3. End-to-end: pretend-mom → SES → S3 + Lambda → AgentCore → edit + push + reply. No local driver involved.
+1. ✅ Self-contained `lambda/invoke_agent/` module (handler.py + scripts mirroring the `collector/` layout). Idempotent bootstrap/build/deploy/wire-into-ses/smoke/delete.
+2. ✅ Receipt rule `cyndibot-inbound` updated to `Actions = [S3Action, LambdaAction]`. LambdaAction is `InvocationType=Event` so SES doesn't wait on the agent's ~30s run.
+3. ✅ Recipient filter wired: Lambda only invokes the agent for `cyndi@cyndibot.jessitron.honeydemo.io`. The agent's reply (sent FROM cyndibot@ TO pretend-mom@) re-enters the rule, but the Lambda correctly no-ops on it — no infinite recursion. Confirmed in CloudWatch.
+4. ✅ Smoke (`lambda/invoke_agent/scripts/smoke`) sends a real pretend-mom email via SES, polls for the dispatcher's "invoking agent runtime" log line, then waits for the `agentcore response: status=200`. First green run: lambda dispatched in <10s, AgentCore returned 200, agent reply landed in S3 as a separate object.
 
-## Still pending after that
+**`runtimeSessionId` keying decision:** `mom-<sha256(from_header_addr)>`. We use the From header (`mail.commonHeaders.from[0]`), not `mail.source`, because SES rewrites the envelope-from to a per-message bounce mailbox when SES is the originating MTA (i.e. self-loop tests). Real moms emailing from gmail would have a stable `mail.source`; using From makes the session stable in both cases. `_print_session_id.py <addr>` computes the expected id.
+
+## Still pending
 
 - `GITHUB_TOKEN` in Secrets Manager + container-entrypoint shim. Required before `push_site_changes` works in the cloud.
-- Real "edit a file" cloud smoke test (greeting payload only validated the parse+reply path).
+- Real "edit a file" cloud smoke test (greeting payload only validated the parse+reply path; the lambda smoke is also greeting-style).
 - SES production access request so mom can actually send email to the bot.
 - **Unreplyable-recipient error visibility.** When the agent tries to `send_reply` to an address SES can't deliver to (sandbox: unverified identity; prod: hard bounce), the current tool returns `success` as long as the SES API call returns a Message-ID — silent failure from the agent's POV. Test by sending an inbound from an unverified address, then verify we surface the failure somewhere actionable (SES bounce SNS topic? agent-side preflight check against verified identities? a "delivery failed" reply to a fallback address?). Discovered when the first real-mom-style email landed in Gmail spam — different failure mode but same observability gap.
 

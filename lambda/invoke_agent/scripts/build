@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Build a deployment zip with handler.py + vendored boto3 (latest).
+# Lambda's bundled boto3 may lag the bedrock-agentcore client, so we vendor.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+BUILD_DIR=build
+ZIP_PATH=build/${LAMBDA_NAME}.zip
+
+rm -rf "${BUILD_DIR}"
+mkdir -p "${BUILD_DIR}/pkg"
+
+echo "==> pip install boto3 botocore into ${BUILD_DIR}/pkg"
+uv pip install \
+  --quiet \
+  --target "${BUILD_DIR}/pkg" \
+  --python-platform aarch64-manylinux2014 \
+  --python-version 3.12 \
+  boto3 botocore
+
+cp handler.py "${BUILD_DIR}/pkg/handler.py"
+
+echo "==> zipping"
+( cd "${BUILD_DIR}/pkg" && zip -qr "../$(basename "${ZIP_PATH}")" . )
+
+ls -lh "${ZIP_PATH}"
+echo
+echo "build complete: ${ZIP_PATH}"

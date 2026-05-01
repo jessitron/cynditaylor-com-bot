@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# End-to-end smoke for the SES -> Lambda -> AgentCore wiring.
+#
+#   1. Send pretend-mom email via SES to cyndi@<AGENT_DOMAIN>.
+#   2. Wait for the SES receipt rule to drop the raw MIME in S3.
+#   3. Poll CloudWatch with filter-log-events for the dispatcher's
+#      "invoking agent runtime" line — that's the proof.
+#   4. Wait for the agent's reply to land in S3 (separate object).
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+export AGENT_DOMAIN AGENT_USERNAME AWS_REGION
+
+LOG_GROUP="/aws/lambda/${LAMBDA_NAME}"
+
+if command -v uv >/dev/null 2>&1; then
+  PY="uv run python"
+else
+  PY="python3"
+fi
+
+# Capture start time as both ISO (for S3 filtering) and millis-epoch (for CloudWatch).
+START_MS=$(python3 -c "import time; print(int(time.time()*1000))")
+SINCE_ISO=$(python3 -c "from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())")
+
+echo "=== Sending pretend-mom email to ${AGENT_USERNAME}@${AGENT_DOMAIN} ==="
+MSG_ID=$(${PY} scripts/_send_smoke_email.py)
+echo "SES MessageId: ${MSG_ID}"
+echo
+
+echo "=== Waiting for SES receipt -> S3 (raw MIME) ==="
+KEY=""
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  sleep 3
+  if KEY=$(${PY} ../../scripts/_pick_newest_inbound.py "${SINCE_ISO}" 2>/dev/null); then
+    break
+  fi
+  echo "  not yet (attempt ${i})"
+done
+
+if [[ -z "${KEY}" ]]; then
+  echo "Timed out waiting for inbound to land in S3." >&2
+  exit 1
+fi
+
+echo "landed: s3://${INBOUND_BUCKET}/${KEY}"
+echo
+
+echo "=== Waiting for dispatcher Lambda to fire (up to 60s) ==="
+SESSION_ID=""
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  sleep 5
+  EVENTS=$(aws logs filter-log-events \
+            --region "${AWS_REGION}" \
+            --log-group-name "${LOG_GROUP}" \
+            --start-time "${START_MS}" \
+            --filter-pattern "invoking agent runtime" \
+            --output json 2>/dev/null || echo '{"events":[]}')
+  if echo "${EVENTS}" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('events') else 1)" 2>/dev/null; then
+    SESSION_ID=$(echo "${EVENTS}" \
+      | python3 -c "
+import json, re, sys
+d = json.load(sys.stdin)
+for e in d.get('events', []):
+    m = re.search(r'session_id=(\S+)', e.get('message', ''))
+    if m:
+        print(m.group(1)); break
+")
+    break
+  fi
+  echo "  not yet (attempt ${i})"
+done
+
+if [[ -z "${SESSION_ID}" ]]; then
+  echo "FAIL: did not see 'invoking agent runtime' in lambda logs (within 60s)" >&2
+  echo
+  echo "Recent ${LOG_GROUP} logs:" >&2
+  aws logs filter-log-events \
+    --region "${AWS_REGION}" \
+    --log-group-name "${LOG_GROUP}" \
+    --start-time "${START_MS}" \
+    --output json 2>&1 \
+    | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for e in d.get('events', []):
+    print(e.get('message','').rstrip())
+" >&2 || true
+  exit 1
+fi
+
+echo "PASS: lambda dispatched to runtime; session_id=${SESSION_ID}"
+echo
+
+echo "=== Waiting for AgentCore response in lambda logs (up to 90s) ==="
+AGENT_STATUS=""
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do
+  sleep 5
+  EVENTS=$(aws logs filter-log-events \
+            --region "${AWS_REGION}" \
+            --log-group-name "${LOG_GROUP}" \
+            --start-time "${START_MS}" \
+            --filter-pattern "agentcore response" \
+            --output json 2>/dev/null || echo '{"events":[]}')
+  AGENT_STATUS=$(echo "${EVENTS}" \
+    | python3 -c "
+import json, re, sys
+d = json.load(sys.stdin)
+for e in d.get('events', []):
+    m = re.search(r'status=(\d+)', e.get('message', ''))
+    if m:
+        print(m.group(1)); break
+")
+  if [[ -n "${AGENT_STATUS}" ]]; then
+    break
+  fi
+  echo "  not yet (attempt ${i})"
+done
+
+if [[ -z "${AGENT_STATUS}" ]]; then
+  echo "WARN: lambda fired but agentcore response not yet logged (within 90s)" >&2
+else
+  echo "agentcore status: ${AGENT_STATUS}"
+fi
+echo
+
+echo "=== Newest object in s3://${INBOUND_BUCKET}/${INBOUND_PREFIX} ==="
+NEWEST_KEY=$(aws s3api list-objects-v2 \
+              --bucket "${INBOUND_BUCKET}" \
+              --prefix "${INBOUND_PREFIX}" \
+              --region "${AWS_REGION}" \
+              --output json \
+              | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+objs = sorted(d.get('Contents') or [], key=lambda o: o['LastModified'], reverse=True)
+print(objs[0]['Key'] if objs else '')
+")
+
+if [[ -n "${NEWEST_KEY}" && "${NEWEST_KEY}" != "${KEY}" ]]; then
+  echo "newest: s3://${INBOUND_BUCKET}/${NEWEST_KEY}"
+  echo "(this is the agent's reply, sent back via SES; original inbound was ${KEY})"
+else
+  echo "newest is still ${KEY:-<none>} — agent reply hasn't landed yet."
+fi
+echo
+
+echo "=== Honeycomb ==="
+echo "team modernity, env cynditaylor-com-bot, dataset cynditaylor-com-bot"
+echo "filter recent traces by attribute 'session.id' = ${SESSION_ID}"

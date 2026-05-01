@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Create or update the dispatcher Lambda. Idempotent.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+ZIP_PATH=build/${LAMBDA_NAME}.zip
+
+if [[ ! -f "${ZIP_PATH}" ]]; then
+  echo "missing ${ZIP_PATH} — run scripts/build first" >&2
+  exit 1
+fi
+
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+ROLE_ARN="arn:aws:iam::${ACCOUNT}:role/${LAMBDA_ROLE_NAME}"
+
+ENV_VARS=$(python3 - <<PY
+import json, os
+print(json.dumps({"Variables": {
+  "CYNDIBOT_AGENT_RUNTIME_ARN": "${AGENT_RUNTIME_ARN}",
+  "CYNDIBOT_INBOUND_PREFIX":    "${INBOUND_PREFIX}",
+  "CYNDIBOT_AGENT_USERNAME":    "${AGENT_USERNAME}",
+  "CYNDIBOT_AGENT_DOMAIN":      "${AGENT_DOMAIN}",
+}}))
+PY
+)
+
+if aws lambda get-function \
+     --function-name "${LAMBDA_NAME}" \
+     --region "${AWS_REGION}" >/dev/null 2>&1; then
+  echo "lambda: ${LAMBDA_NAME} exists — updating code + config"
+  aws lambda update-function-code \
+    --function-name "${LAMBDA_NAME}" \
+    --region "${AWS_REGION}" \
+    --zip-file "fileb://${ZIP_PATH}" \
+    >/dev/null
+  aws lambda wait function-updated \
+    --function-name "${LAMBDA_NAME}" \
+    --region "${AWS_REGION}"
+  aws lambda update-function-configuration \
+    --function-name "${LAMBDA_NAME}" \
+    --region "${AWS_REGION}" \
+    --role "${ROLE_ARN}" \
+    --runtime "${LAMBDA_RUNTIME}" \
+    --handler handler.handler \
+    --timeout "${LAMBDA_TIMEOUT_S}" \
+    --memory-size "${LAMBDA_MEMORY_MB}" \
+    --environment "${ENV_VARS}" \
+    >/dev/null
+  aws lambda wait function-updated \
+    --function-name "${LAMBDA_NAME}" \
+    --region "${AWS_REGION}"
+else
+  echo "lambda: creating ${LAMBDA_NAME}"
+  aws lambda create-function \
+    --function-name "${LAMBDA_NAME}" \
+    --region "${AWS_REGION}" \
+    --runtime "${LAMBDA_RUNTIME}" \
+    --architectures "${LAMBDA_ARCH}" \
+    --role "${ROLE_ARN}" \
+    --handler handler.handler \
+    --zip-file "fileb://${ZIP_PATH}" \
+    --timeout "${LAMBDA_TIMEOUT_S}" \
+    --memory-size "${LAMBDA_MEMORY_MB}" \
+    --environment "${ENV_VARS}" \
+    --description "Dispatches SES inbound emails to the cyndibot AgentCore runtime" \
+    >/dev/null
+  aws lambda wait function-active-v2 \
+    --function-name "${LAMBDA_NAME}" \
+    --region "${AWS_REGION}"
+fi
+
+aws lambda get-function-configuration \
+  --function-name "${LAMBDA_NAME}" \
+  --region "${AWS_REGION}" \
+  --query '{name:FunctionName,arn:FunctionArn,runtime:Runtime,arch:Architectures[0],role:Role,state:State,lastUpdateStatus:LastUpdateStatus}' \
+  --output table
+
+echo
+echo "deploy complete."

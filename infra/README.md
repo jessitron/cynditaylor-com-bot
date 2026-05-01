@@ -230,6 +230,41 @@ aws bedrock-agentcore invoke-agent-runtime \
 - The CLI subcommand for invoke is `aws bedrock-agentcore invoke-agent-runtime` (runtime plane). The CLI for create/get is `aws bedrock-agentcore-control create-agent-runtime` (control plane). Different services.
 - `--payload` for `invoke-agent-runtime` is passed as `fileb://path-to-json-file` in the smoke script (not yet tested if inline `--payload '{...}'` works).
 
+## 2026-05-01 — SES → Lambda → AgentCore dispatcher (`lambda/invoke_agent/`)
+
+Self-contained module. Owns its own IAM role (`CyndibotInvokeAgentLambda`) and Lambda function (`cyndibot-invoke-agent`). No ECR — handler is a plain zip with vendored boto3 (Lambda's bundled boto3 may lag the `bedrock-agentcore` client, so we vendor latest to be deterministic).
+
+Mirrors the `collector/` module's layout: `config.env`, `scripts/{bootstrap,build,deploy,wire-into-ses,smoke,delete}`. Each script is idempotent.
+
+Run order on first deploy:
+
+```bash
+lambda/invoke_agent/scripts/bootstrap        # IAM role + inline policy
+lambda/invoke_agent/scripts/build            # uv pip install boto3 + zip handler.py
+lambda/invoke_agent/scripts/deploy           # create-function (or update if exists)
+lambda/invoke_agent/scripts/wire-into-ses    # add-permission for ses + update receipt rule
+lambda/invoke_agent/scripts/smoke            # full pretend-mom roundtrip via real SES
+```
+
+To tear it down (receipt rule reverts to S3-only; raw inbound capture keeps working):
+
+```bash
+lambda/invoke_agent/scripts/delete
+```
+
+State-changing AWS resources owned by this module:
+
+- IAM role `CyndibotInvokeAgentLambda` + inline policy `CyndibotInvokeAgentInline` (CloudWatch Logs + `bedrock-agentcore:InvokeAgentRuntime` on the cyndibot runtime ARN).
+- Lambda function `cyndibot-invoke-agent` (python3.12, arm64, 256MB, 60s timeout). Env vars: `CYNDIBOT_AGENT_RUNTIME_ARN`, `CYNDIBOT_INBOUND_PREFIX`, `CYNDIBOT_AGENT_USERNAME`, `CYNDIBOT_AGENT_DOMAIN`.
+- Lambda resource policy statement `ses-invoke-cyndibot-invoke-agent` (`Principal: ses.amazonaws.com`, `AWS:SourceAccount` condition).
+- Receipt rule `cyndibot-inbound` in `instruqt-email-ruleset` updated to `Actions = [S3Action, LambdaAction]`. Lambda action is `InvocationType=Event` so SES doesn't wait for the agent's ~30s run.
+
+### Design notes worth keeping
+
+- **`runtimeSessionId` keying:** `mom-<sha256(from_header_addr)>`. We use the From: header (`mail.commonHeaders.from[0]`), not the SMTP envelope sender (`mail.source`), because SES rewrites the envelope-from to a per-message bounce mailbox when SES itself is the originating MTA (i.e. our self-loop tests). For real moms emailing from gmail both fields would resolve to her address; using From also makes the session stable for the smoke loop. Use `lambda/invoke_agent/scripts/_print_session_id.py <addr>` to compute the expected ID.
+- **Recipient filter:** Lambda only invokes the agent for `cyndi@cyndibot.jessitron.honeydemo.io` (configurable via `CYNDIBOT_AGENT_USERNAME`). Other addresses on the domain — `pretend-mom@`, `smoketest-*@`, agent-reply round-trips — still land in S3 via the S3Action but the Lambda no-ops on them. This is what lets the agent send replies to `pretend-mom@cyndibot…` for self-loop testing without infinite recursion.
+- **Vendored boto3:** ~15 MB zip. If/when Lambda's bundled boto3 catches up to bedrock-agentcore, we can drop the vendored copy and use a pure handler.
+
 ## OTel collector Lambda — see `collector/`
 
 Self-contained module. Owns its own ECR repo, IAM role, Lambda, and Function URL. State-changing commands (ECR repo, IAM role, Lambda CRUD) are driven by scripts in `collector/scripts/`. Run order on first deploy:
