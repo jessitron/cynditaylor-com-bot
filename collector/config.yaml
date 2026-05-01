@@ -8,6 +8,9 @@ receivers:
     protocols:
       http:
         endpoint: 0.0.0.0:4318
+        # include_metadata exposes incoming HTTP headers as request metadata
+        # so processors can copy them onto spans (see attributes/boswell below).
+        include_metadata: true
         auth:
           authenticator: bearertokenauth/ingest
 
@@ -32,6 +35,22 @@ processors:
       spanevent:
         - 'true'
 
+  # Boswell leaves a mark on every span he processes. Lets you reverse-lookup
+  # which collector deployment, and which Lambda invocation, touched a span.
+  # The X-Amzn-Trace-Id header is forwarded by LWA and is unique per Lambda
+  # invocation (it's the X-Ray trace header — collector treats it as opaque).
+  attributes/boswell:
+    actions:
+      - action: insert
+        key: collector.boswell
+        value: washere
+      - action: insert
+        key: collector.boswell.version
+        value: ${env:BOSWELL_VERSION}
+      - action: insert
+        key: collector.boswell.invocation_trace_id
+        from_context: metadata.x-amzn-trace-id
+
   # No batch processor: under Lambda's freeze-after-invocation lifecycle, batched
   # spans sit in memory until the next cold start (or get lost). Synchronous
   # export per request is correct here.
@@ -51,7 +70,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [transform/lift_event_attrs, filter/drop_empty_events]
+      processors: [transform/lift_event_attrs, filter/drop_empty_events, attributes/boswell]
       exporters: [otlphttp/honeycomb]
   telemetry:
     logs:

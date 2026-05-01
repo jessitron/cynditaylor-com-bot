@@ -7,10 +7,21 @@ source ./config.env
 
 LOCAL_TAG="${COLLECTOR_NAME}:local"
 
+# Bake the project's git short-SHA into the image so the running collector
+# can stamp every span with collector.boswell.version. Append "-dirty" if
+# the working tree has uncommitted changes — telemetry processed by an
+# uncommitted build is suspicious and worth flagging.
+SHA=$(git rev-parse --short HEAD)
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  SHA="${SHA}-dirty"
+fi
+echo "==> baking BOSWELL_VERSION=${SHA}"
+
 docker buildx build \
   --platform "linux/${LAMBDA_ARCH}" \
   --provenance=false \
   --sbom=false \
+  --build-arg "BOSWELL_VERSION=${SHA}" \
   --load \
   -t "${LOCAL_TAG}" .
 

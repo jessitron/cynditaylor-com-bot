@@ -1,6 +1,8 @@
-# OTel Collector as a Lambda
+# OTel Collector as a Lambda — "Boswell"
 
 Self-contained module: an OpenTelemetry Collector packaged as a container-image AWS Lambda, fronted by a Function URL. Use it when you need OTTL post-processing on a low-traffic OTel data path but don't want to run persistent compute.
+
+The collector is named **Boswell** in this project — Samuel Johnson's biographer, who recorded everything one specific person said. It stamps every span it processes with `collector.boswell.*` provenance attributes (see "Provenance" below). When reusing this module, rename via `COLLECTOR_NAME` in `config.env`.
 
 Built around `otel/opentelemetry-collector-contrib` + [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter), which lets the collector's OTLP/HTTP receiver respond to Function URL invocations.
 
@@ -30,8 +32,8 @@ Lambda container image
 
 | Path | Purpose |
 | --- | --- |
-| `Dockerfile` | Collector contrib image + LWA extension. Pinned versions. |
-| `config.yaml` | Receivers, OTTL transform, filter, exporter. Reads secrets from env. |
+| `Dockerfile` | Alpine base + staged otelcol-contrib binary + LWA extension. Pinned versions. Takes `BOSWELL_VERSION` build arg. |
+| `config.yaml` | Receivers, OTTL transform, filter, attributes processor, exporter. Reads secrets from env. |
 | `config.env` | Module-level config (Lambda name, ECR repo, region). Edit when reusing. |
 | `.env.example` | Per-deployment secrets template. Copy to `.env`, fill in. |
 | `infra/role-trust.json` | Lambda execution role trust policy. |
@@ -117,6 +119,20 @@ filter/drop_empty_events:
 ```
 
 Filter drops items where the condition is true. `'true'` is unconditional — every span event gets dropped. If you want to keep some (e.g. exception events), change to e.g. `'name != "exception"'`.
+
+## Provenance: what Boswell stamps on every span
+
+The `attributes/boswell` processor in `config.yaml` adds three fields to every span the collector processes:
+
+| Attribute | Source | What it tells you |
+| --- | --- | --- |
+| `collector.boswell` | static `"washere"` | Boswell touched this span. Useful as a filter (`WHERE collector.boswell exists`) to find traces that did vs. didn't go through the collector. |
+| `collector.boswell.version` | git short-SHA at build time, `-dirty` if the working tree wasn't clean | Which build of Boswell processed the span. Lets you bisect "did this trace shape change between deploys?". `scripts/build` derives it via `git rev-parse --short HEAD`. |
+| `collector.boswell.invocation_trace_id` | `X-Amzn-Trace-Id` header forwarded by Lambda Web Adapter | A per-Lambda-invocation marker. Format is `Root=1-<epoch>-<id>;Parent=<parent>;Sampled=<n>;Lineage=...`. The `Root=1-…` portion is unique per invocation; group spans by this attr to see which spans were processed in the same Lambda warm container. |
+
+The `invocation_trace_id` field uses the X-Ray trace header rather than the Lambda runtime request ID because LWA doesn't forward `Lambda-Runtime-Aws-Request-Id` as an HTTP header. Functionally equivalent for "which invocation processed this?" — just framed as the X-Ray trace ID.
+
+The receiver needs `include_metadata: true` for the `from_context: metadata.x-amzn-trace-id` lookup to work; the `attributes` processor reads request metadata only when the receiver exposes it.
 
 ## Limitations
 

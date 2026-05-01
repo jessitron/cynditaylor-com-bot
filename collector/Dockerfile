@@ -16,4 +16,9 @@ ENV AWS_LWA_PORT=4318
 ENV AWS_LWA_INVOKE_MODE=buffered
 ENV AWS_LWA_READINESS_CHECK_PATH=/
 
+# Build identity stamped onto every span by the attributes/boswell processor.
+# Set via --build-arg BOSWELL_VERSION=$(git rev-parse --short HEAD) in scripts/build.
+ARG BOSWELL_VERSION=unknown
+ENV BOSWELL_VERSION=${BOSWELL_VERSION}
+
 CMD ["/app/otelcol-contrib", "--config=/etc/otel/config.yaml"]
