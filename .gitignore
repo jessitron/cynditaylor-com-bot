@@ -9,3 +9,7 @@ conversation_history/
 dist/
 build/
 .env
+
+# Override global gitexcludes for this repo: pin node version so the
+# Phoenix MCP server (npx) works on every machine that clones this.
+!.tool-versions
