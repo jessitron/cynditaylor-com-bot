@@ -4,17 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-This repo is in a **pre-implementation** state. The README describes what we want to build, not what exists. There is no source code, no `requirements.txt`, no `agent/`, no `lambda/`, and no `infra/` directory yet. When asked to "run" or "test" something, first check whether the thing even exists — don't assume the layout in the README is real.
+In progress, partially built. **`notes/ACTIVE.md` is the source of truth for what exists vs. what's planned** — read it before assuming anything about layout or current state.
 
-Previous commit history shows earlier attempts were cleared out (`9c4f1e0 Clear it out, start again`). Treat this as a fresh start.
+Built: local Strands agent (`agent/cyndibot.py`, `agent/inbound.py`), full OTel → Phoenix and → Honeycomb, SES inbound + outbound end-to-end on `cyndibot.jessitron.honeydemo.io`, site-edit tools (`agent/tools/site_tools.py`) with clone/sync/edit/commit, AgentCore runtime deployed (`cyndibot-o2gGSvB6Hz` in us-west-2), local container parity.
+
+Not yet built: SES → Lambda glue (today the agent is invoked manually via `scripts/agent-inbound` or `scripts/pretend-mom-roundtrip`), `push_site_changes` wired into the agent, `GITHUB_TOKEN` in Secrets Manager for cloud pushes, SES production-access (still in sandbox).
 
 ## What we're building
 
-An agent that lets Jessitron's mom update her static HTML GitHub Pages site (`cynditaylor-com`) by sending SMS messages. The planned pipeline: Twilio SMS → AWS Lambda webhook → AWS AgentCore → Strands Agent (tools: GitHub read/write, Twilio reply) → commit to the site repo → GitHub Pages deploys → SMS confirmation back to mom. Observability via OpenTelemetry → Arize Phoenix.
+An agent that lets Jessitron's mom update her static HTML GitHub Pages site (`cynditaylor-com`) by **sending email**. Pipeline: mom emails `*@cyndibot.jessitron.honeydemo.io` → Amazon SES inbound → S3 (raw MIME, source of truth) → (planned) Lambda → AWS AgentCore Runtime → Strands Agent (tools: `parse_inbound`, `send_reply`, `sync_workspace`, `read/write/list_site_file`, `commit_site_changes`, `push_site_changes`) → commit + push to the site repo → GitHub Pages deploys → SES `SendEmail` reply back to mom. Observability via OpenTelemetry → Arize Phoenix locally and Honeycomb in the cloud.
 
-The target site repo (`cynditaylor-com/`) is gitignored — if it appears locally it's a sibling checkout, not part of this repo.
+> **Why email, not SMS?** Earlier plan used Twilio SMS. US toll-free A2P / 10DLC carrier compliance was disproportionate for a 1:1 bot, so we pivoted to SES. Some Twilio scripts still linger in `scripts/` (`twilio-send`, `_format_twilio_response.py`) and `.env.example` — `notes/TODO.md` tracks their removal. **Don't add new Twilio code.**
 
-See README.md for the full architecture and the rationale in "Key decisions" (Strands for AWS-native + OTel, direct GitHub API over git clone, no confirmation step because the site is low-risk, Phoenix for OTel-native trace inspection).
+The target site repo (`cynditaylor-com/`) is gitignored — if it appears locally it's the agent's working clone (or a sibling checkout), not part of this repo.
+
+See README.md for the full architecture and the rationale in "Key decisions" (Strands for AWS-native + OTel, clone-into-session-storage over direct GitHub API, no confirmation step because the site is low-risk, Phoenix locally + Honeycomb in cloud).
 
 ## Working conventions (from `.augment-guidelines`)
 
@@ -42,6 +46,8 @@ See README.md for the full architecture and the rationale in "Key decisions" (St
 
 ## Observability
 
-- **Arize Phoenix first** (self-hosted locally via docker, default endpoint `http://localhost:6006/v1/traces`). Honeycomb may come later.
-- `.env` has the generic OTel vars (`OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT` pointed at Phoenix, etc.) and is gitignored.
-- **After any test run that emits traces, report the Phoenix trace URL** so Jessitron can click through to it. `scripts/check-last-span` already prints the URL for the most recent span per project; use it (or an equivalent) to grab the URL. Format: `http://localhost:6006/projects/{projectId}/traces/{traceId}`.
+- **Local dev: Arize Phoenix** (self-hosted via docker, endpoint `http://localhost:6006/v1/traces`). Started by `./run`.
+- **Cloud (AgentCore runtime): Honeycomb**, team `modernity`, env `cynditaylor-com-bot`. Endpoint + ingest key are passed as AgentCore `environmentVariables`.
+- Bedrock spans are auto-instrumented by `openinference-instrumentation-bedrock`. Strands' own GenAI spans land as queryable columns (`gen_ai.usage.*`, `gen_ai.{input,output}.messages`, etc.) — see the `notes/skills/strands-honeycomb-tracing/SKILL.md` skill for the exact env vars and the `is_langfuse` trick that makes Honeycomb's AI view work.
+- `.env` has all the OTel vars locally and is gitignored.
+- **After any test run that emits traces, report the trace URL** so Jessitron can click through. Locally: `scripts/check-last-span` / `scripts/check-last-trace` print URLs of the form `http://localhost:6006/projects/{projectId}/traces/{traceId}`. For cloud runs, surface the Honeycomb trace ID from the AgentCore invoke output.
