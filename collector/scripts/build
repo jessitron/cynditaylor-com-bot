@@ -9,10 +9,10 @@ LOCAL_TAG="${COLLECTOR_NAME}:local"
 
 # Bake the project's git short-SHA into the image so the running collector
 # can stamp every span with collector.boswell.version. Append "-dirty" if
-# the working tree has uncommitted changes — telemetry processed by an
-# uncommitted build is suspicious and worth flagging.
+# the collector/ subdir specifically has uncommitted changes — unrelated
+# work elsewhere in the repo doesn't affect the collector binary.
 SHA=$(git rev-parse --short HEAD)
-if ! git diff --quiet || ! git diff --cached --quiet; then
+if ! git diff --quiet . || ! git diff --cached --quiet .; then
   SHA="${SHA}-dirty"
 fi
 echo "==> baking BOSWELL_VERSION=${SHA}"
