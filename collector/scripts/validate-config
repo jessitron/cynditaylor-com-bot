@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Validate collector/config.yaml by running `otelcol validate` inside the
+# already-built image. Catches OTTL syntax errors and component typos before
+# we push.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+LOCAL_TAG="${COLLECTOR_NAME}:local"
+
+if ! docker image inspect "${LOCAL_TAG}" >/dev/null 2>&1; then
+  echo "image ${LOCAL_TAG} not found; run scripts/build first" >&2
+  exit 1
+fi
+
+# Stub the env vars the config references; values don't matter for validation.
+docker run --rm --entrypoint /otelcol-contrib \
+  -e HONEYCOMB_API_KEY=stub \
+  -e HONEYCOMB_OTLP_ENDPOINT=https://stub.example.com \
+  -e INGEST_BEARER_TOKEN=stub \
+  "${LOCAL_TAG}" \
+  validate --config=/etc/otel/config.yaml

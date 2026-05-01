@@ -1,0 +1,54 @@
+extensions:
+  bearertokenauth/ingest:
+    scheme: Bearer
+    token: ${env:INGEST_BEARER_TOKEN}
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth/ingest
+
+processors:
+  # Lift every span-event attribute onto the parent span (last-write-wins on collision),
+  # then strip the event of its attributes. The producer SDK can't do this:
+  # SpanProcessor.on_end gets a ReadableSpan whose events are immutable.
+  transform/lift_event_attrs:
+    error_mode: ignore
+    trace_statements:
+      - context: spanevent
+        statements:
+          - merge_maps(span.attributes, attributes, "upsert")
+          - keep_keys(attributes, [])
+
+  # Drop every span event. They had attributes a moment ago; now they'd just be
+  # duration_ms=0 noise rows in Honeycomb. Remove from the pipeline if some
+  # events are worth keeping (e.g. exception events).
+  filter/drop_empty_events:
+    error_mode: ignore
+    traces:
+      spanevent:
+        - 'true'
+
+  batch:
+    send_batch_size: 100
+    timeout: 1s
+
+exporters:
+  otlphttp/honeycomb:
+    endpoint: ${env:HONEYCOMB_OTLP_ENDPOINT}
+    headers:
+      x-honeycomb-team: ${env:HONEYCOMB_API_KEY}
+
+service:
+  extensions: [bearertokenauth/ingest]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform/lift_event_attrs, filter/drop_empty_events, batch]
+      exporters: [otlphttp/honeycomb]
+  telemetry:
+    logs:
+      level: info

@@ -22,20 +22,24 @@ Strands' OTel telemetry now lands in Honeycomb as queryable individual columns (
 
 The full setup (with traps and verification queries) is captured as a Claude Code skill at `notes/skills/strands-honeycomb-tracing/SKILL.md` so other agents can replicate it.
 
-## Next slice: drop the redundant span events
+## Next slice: drop the redundant span events — via OTel collector as Lambda
 
 Currently each LLM-call span in Honeycomb has both:
 - the JSON-encoded `gen_ai.{input,output}.messages` attrs on the span (good, queryable)
 - the `gen_ai.client.inference.operation.details` span events that carry the same payload (redundant — they show up in Honeycomb as separate rows with `name=gen_ai.client.inference.operation.details, duration_ms=0`)
 
-Goal: consolidate. Two sub-questions for this slice:
+Producer-side options were both unsatisfying:
 
-1. **Cheap version:** custom OTel `SpanProcessor` whose `on_end` walks `span.events`, hoists any unique event-attrs onto the span itself (with a prefix like `event.<event_name>.<attr>` to avoid collisions). Doesn't drop the events; just makes sure no field is event-only.
-2. **Full version:** wrap the OTLP exporter so it filters span events out of the serialized payload before send. Events on a `ReadableSpan` are immutable at `on_end` time — must intercept later. The OTLP exporter does its own serialization in `OTLPSpanExporter.export()`; subclass it or wrap it with an exporter-decorator pattern.
+1. **`SpanProcessor.on_end`:** can't mutate. `ReadableSpan` is read-only by design. Reaching into `span._events` / `span._attributes` works but pins us to private SDK internals.
+2. **Wrapping `OTLPSpanExporter.export`:** doable but brittle — every SDK upgrade is a chance for the wrap to drift.
 
-Reference points to read in `strands-agents`:
+The collector's `transform` processor (OTTL) was built for exactly this. `merge_maps(span.attributes, attributes, "upsert")` in the `spanevent` context lifts every event attr onto the parent span; the `filter` processor then drops the now-empty events so Honeycomb doesn't show duration-zero noise.
+
+To avoid running a persistent collector for mom-volume traffic, we ship the collector **as a Lambda container** (`collector/` module). AgentCore's OTel exporter points at a Function URL; the Lambda transforms and forwards to Honeycomb. Cold start (~1–2 s) is invisible to mom because export is async on AgentCore's side.
+
+Module is intentionally self-contained so it can be `cp -r`'d to other projects. Auth is bearer token in a header (Function URL is `auth_type=NONE`; we accept the security tradeoff in exchange for not having to write a Sigv4-signing OTel exporter on the AgentCore side).
+
+Reference points if we ever revisit producer-side instead:
 - `strands/telemetry/tracer.py:241` (`_add_event`) — the `to_span_attributes` knob.
 - `strands/telemetry/tracer.py:114` (`is_langfuse`) — the heuristic we're tripping.
 - All call sites with `to_span_attributes=self.is_langfuse`: lines 357, 417, 472, 563, 660, 766, 842, 864.
-
-Do (1) first, see if Honeycomb is happy without the events being filtered out (they're cheap to ignore in queries — just `WHERE duration_ms > 0`). If event noise is actually hurting, do (2).

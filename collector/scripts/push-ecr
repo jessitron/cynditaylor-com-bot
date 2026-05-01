@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+LOCAL_TAG="${COLLECTOR_NAME}:local"
+REMOTE_TAG="${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:latest"
+
+if ! docker image inspect "${LOCAL_TAG}" >/dev/null 2>&1; then
+  echo "image ${LOCAL_TAG} not found; run scripts/build first" >&2
+  exit 1
+fi
+
+echo "authenticating docker to ECR (${AWS_REGION})..."
+aws ecr get-login-password --region "${AWS_REGION}" \
+  | docker login --username AWS --password-stdin "${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+echo "tagging ${LOCAL_TAG} -> ${REMOTE_TAG}"
+docker tag "${LOCAL_TAG}" "${REMOTE_TAG}"
+
+echo "pushing ${REMOTE_TAG}..."
+docker push "${REMOTE_TAG}"
+
+echo
+echo "pushed: ${REMOTE_TAG}"

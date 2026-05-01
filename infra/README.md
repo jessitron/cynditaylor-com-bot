@@ -229,3 +229,18 @@ aws bedrock-agentcore invoke-agent-runtime \
 
 - The CLI subcommand for invoke is `aws bedrock-agentcore invoke-agent-runtime` (runtime plane). The CLI for create/get is `aws bedrock-agentcore-control create-agent-runtime` (control plane). Different services.
 - `--payload` for `invoke-agent-runtime` is passed as `fileb://path-to-json-file` in the smoke script (not yet tested if inline `--payload '{...}'` works).
+
+## OTel collector Lambda — see `collector/`
+
+Self-contained module. Owns its own ECR repo, IAM role, Lambda, and Function URL. State-changing commands (ECR repo, IAM role, Lambda CRUD) are driven by scripts in `collector/scripts/`. Run order on first deploy:
+
+```bash
+collector/scripts/bootstrap         # creates ECR repo cyndibot-collector + IAM role CyndibotCollectorLambda
+collector/scripts/build
+collector/scripts/push-ecr
+collector/scripts/deploy            # creates lambda cyndibot-collector + function URL (auth=NONE)
+```
+
+Function URL auth is `NONE` because the collector enforces a bearer token internally; the OTel Python SDK doesn't sign with Sigv4, so IAM auth would mean writing a custom signing exporter. Bearer token lives in `collector/.env` (gitignored), generated at `bootstrap` time.
+
+When state actually gets created, append a dated section here with the same shape as the AgentCore entries above.

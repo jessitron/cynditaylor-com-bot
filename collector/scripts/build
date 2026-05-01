@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+LOCAL_TAG="${COLLECTOR_NAME}:local"
+
+docker buildx build --platform "linux/${LAMBDA_ARCH}" --load -t "${LOCAL_TAG}" .
+
+SIZE=$(docker image inspect "${LOCAL_TAG}" --format '{{.Size}}')
+python3 -c "print(f'Built ${LOCAL_TAG} — {${SIZE}/1024/1024:.1f} MB')"

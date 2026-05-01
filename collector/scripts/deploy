@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Create-or-update the Lambda + Function URL. Idempotent.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+# shellcheck disable=SC1091
+source ./.env
+
+for var in HONEYCOMB_API_KEY HONEYCOMB_OTLP_ENDPOINT INGEST_BEARER_TOKEN; do
+  if [[ -z "${!var:-}" ]]; then
+    echo "missing ${var} in collector/.env" >&2
+    exit 1
+  fi
+done
+
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+IMAGE_URI="${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:latest"
+ROLE_ARN="arn:aws:iam::${ACCOUNT}:role/${LAMBDA_ROLE_NAME}"
+
+ENV_JSON=$(python3 - <<PY
+import json, os
+print(json.dumps({"Variables": {
+    "HONEYCOMB_API_KEY": os.environ["HONEYCOMB_API_KEY"],
+    "HONEYCOMB_OTLP_ENDPOINT": os.environ["HONEYCOMB_OTLP_ENDPOINT"],
+    "INGEST_BEARER_TOKEN": os.environ["INGEST_BEARER_TOKEN"],
+}}))
+PY
+)
+
+if aws lambda get-function \
+     --function-name "${COLLECTOR_NAME}" \
+     --region "${AWS_REGION}" >/dev/null 2>&1; then
+  echo "lambda: updating ${COLLECTOR_NAME} image"
+  aws lambda update-function-code \
+    --function-name "${COLLECTOR_NAME}" \
+    --image-uri "${IMAGE_URI}" \
+    --region "${AWS_REGION}" \
+    >/dev/null
+  aws lambda wait function-updated \
+    --function-name "${COLLECTOR_NAME}" \
+    --region "${AWS_REGION}"
+  echo "lambda: updating ${COLLECTOR_NAME} env"
+  aws lambda update-function-configuration \
+    --function-name "${COLLECTOR_NAME}" \
+    --environment "${ENV_JSON}" \
+    --region "${AWS_REGION}" \
+    >/dev/null
+  aws lambda wait function-updated \
+    --function-name "${COLLECTOR_NAME}" \
+    --region "${AWS_REGION}"
+else
+  echo "lambda: creating ${COLLECTOR_NAME}"
+  aws lambda create-function \
+    --function-name "${COLLECTOR_NAME}" \
+    --package-type Image \
+    --code "ImageUri=${IMAGE_URI}" \
+    --role "${ROLE_ARN}" \
+    --architectures "${LAMBDA_ARCH}" \
+    --memory-size "${LAMBDA_MEMORY_MB}" \
+    --timeout "${LAMBDA_TIMEOUT_S}" \
+    --environment "${ENV_JSON}" \
+    --region "${AWS_REGION}" \
+    >/dev/null
+  aws lambda wait function-active-v2 \
+    --function-name "${COLLECTOR_NAME}" \
+    --region "${AWS_REGION}"
+
+  echo "lambda: creating function URL (auth=NONE; bearer token enforced inside collector)"
+  aws lambda create-function-url-config \
+    --function-name "${COLLECTOR_NAME}" \
+    --auth-type NONE \
+    --region "${AWS_REGION}" \
+    >/dev/null
+  aws lambda add-permission \
+    --function-name "${COLLECTOR_NAME}" \
+    --statement-id FunctionURLAllowPublic \
+    --action lambda:InvokeFunctionUrl \
+    --principal '*' \
+    --function-url-auth-type NONE \
+    --region "${AWS_REGION}" \
+    >/dev/null
+fi
+
+URL=$(aws lambda get-function-url-config \
+        --function-name "${COLLECTOR_NAME}" \
+        --region "${AWS_REGION}" \
+        --query FunctionUrl --output text)
+
+echo
+echo "function URL:        ${URL}"
+echo "OTLP traces endpoint: ${URL}v1/traces"
+echo
+echo "set on the producer (e.g. AgentCore environmentVariables):"
+echo "  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${URL}v1/traces"
+echo "  OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer ${INGEST_BEARER_TOKEN}"

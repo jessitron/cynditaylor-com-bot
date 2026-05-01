@@ -1,0 +1,5 @@
+.env
+.env.example
+README.md
+scripts/
+infra/

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Tear down the deployed Lambda + Function URL. Leaves ECR repo and IAM role
+# in place (cheap to keep, expensive to recreate). Run scripts/bootstrap to
+# rebuild from scratch.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+if aws lambda get-function-url-config \
+     --function-name "${COLLECTOR_NAME}" \
+     --region "${AWS_REGION}" >/dev/null 2>&1; then
+  echo "deleting function URL config"
+  aws lambda delete-function-url-config \
+    --function-name "${COLLECTOR_NAME}" \
+    --region "${AWS_REGION}"
+fi
+
+if aws lambda get-function \
+     --function-name "${COLLECTOR_NAME}" \
+     --region "${AWS_REGION}" >/dev/null 2>&1; then
+  echo "deleting lambda ${COLLECTOR_NAME}"
+  aws lambda delete-function \
+    --function-name "${COLLECTOR_NAME}" \
+    --region "${AWS_REGION}"
+fi
+
+echo "done. ECR repo ${ECR_REPO} and role ${LAMBDA_ROLE_NAME} still exist."

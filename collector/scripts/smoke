@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Send a synthetic OTLP/HTTP-protobuf trace to the deployed collector.
+# Verifies: bearer auth passes, transform runs, Honeycomb accepts the span.
+# Prints the trace ID so you can pull it up in Honeycomb.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+# shellcheck disable=SC1091
+source ./.env
+
+URL=$(aws lambda get-function-url-config \
+        --function-name "${COLLECTOR_NAME}" \
+        --region "${AWS_REGION}" \
+        --query FunctionUrl --output text)
+
+python3 scripts/_send_smoke_otlp.py \
+  --endpoint "${URL}v1/traces" \
+  --token "${INGEST_BEARER_TOKEN}"

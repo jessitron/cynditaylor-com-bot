@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# One-time per AWS account/region: ECR repo, Lambda execution role, bearer token.
+# Idempotent — safe to re-run.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+if [[ ! -f .env ]]; then
+  cp .env.example .env
+  echo "created collector/.env from template — fill in HONEYCOMB_API_KEY before deploy" >&2
+fi
+
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+
+echo "==> account ${ACCOUNT}, region ${AWS_REGION}"
+
+if aws ecr describe-repositories \
+     --repository-names "${ECR_REPO}" \
+     --region "${AWS_REGION}" >/dev/null 2>&1; then
+  echo "ecr: repo ${ECR_REPO} already exists"
+else
+  echo "ecr: creating repo ${ECR_REPO}"
+  aws ecr create-repository \
+    --repository-name "${ECR_REPO}" \
+    --region "${AWS_REGION}" \
+    --image-scanning-configuration scanOnPush=true \
+    --image-tag-mutability MUTABLE \
+    >/dev/null
+fi
+
+if aws iam get-role --role-name "${LAMBDA_ROLE_NAME}" >/dev/null 2>&1; then
+  echo "iam: role ${LAMBDA_ROLE_NAME} already exists"
+else
+  echo "iam: creating role ${LAMBDA_ROLE_NAME}"
+  aws iam create-role \
+    --role-name "${LAMBDA_ROLE_NAME}" \
+    --assume-role-policy-document file://infra/role-trust.json \
+    --description "Execution role for the OTel collector Lambda" \
+    >/dev/null
+  aws iam attach-role-policy \
+    --role-name "${LAMBDA_ROLE_NAME}" \
+    --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+fi
+
+if ! grep -E '^export INGEST_BEARER_TOKEN=.+' .env >/dev/null 2>&1 \
+   || grep -E '^export INGEST_BEARER_TOKEN=$' .env >/dev/null 2>&1; then
+  TOKEN=$(openssl rand -hex 32)
+  python3 - "$TOKEN" <<'PY'
+import pathlib, re, sys
+token = sys.argv[1]
+p = pathlib.Path(".env")
+text = p.read_text()
+new_line = f'export INGEST_BEARER_TOKEN={token}'
+if re.search(r'^export INGEST_BEARER_TOKEN=', text, flags=re.M):
+    text = re.sub(r'^export INGEST_BEARER_TOKEN=.*$', new_line, text, flags=re.M)
+else:
+    text = text.rstrip() + "\n" + new_line + "\n"
+p.write_text(text)
+PY
+  echo "token: generated INGEST_BEARER_TOKEN, wrote collector/.env"
+else
+  echo "token: INGEST_BEARER_TOKEN already set in collector/.env"
+fi
+
+echo
+echo "bootstrap complete."
+echo "next: edit collector/.env and set HONEYCOMB_API_KEY, then run scripts/build && scripts/push-ecr && scripts/deploy"
