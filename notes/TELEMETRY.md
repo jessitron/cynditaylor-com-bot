@@ -39,3 +39,13 @@ Reference points if we ever revisit producer-side instead:
 - `strands/telemetry/tracer.py:241` (`_add_event`) — the `to_span_attributes` knob.
 - `strands/telemetry/tracer.py:114` (`is_langfuse`) — the heuristic we're tripping.
 - All call sites with `to_span_attributes=self.is_langfuse`: lines 357, 417, 472, 563, 660, 766, 842, 864.
+
+## TODO: stamp `session.id` on every agent span
+
+The dispatcher Lambda's per-email events (dataset `cyndibot-dispatcher`) carry `session.id = mom-<sha256(from)>` — same value the dispatcher passes to AgentCore as `runtimeSessionId`. The agent's traces (dataset `cynditaylor-com-bot`) do **not** currently have a `session.id` column at all (verified 2026-05-03 via `find_columns`). Strands and `BedrockInstrumentor` don't emit it, and AgentCore doesn't inject it.
+
+Goal: add `session.id` (OTel semconv-standard name) as a span attribute on every agent span, with the same value the dispatcher used. Then the dispatcher's per-email event row joins to the agent's trace by a single column name across two datasets.
+
+Sketch:
+- `agent/server.py::invoke(payload)` is the AgentCore entrypoint; it currently only receives `{"s3_key": ...}`. The `runtimeSessionId` is set by the caller (`bedrock-agentcore.invoke_agent_runtime(runtimeSessionId=...)`) and is available to the running container — check whether AgentCore exposes it via env var or request context (e.g. `bedrock_agentcore` SDK), or have the dispatcher add it to the payload as a fallback.
+- Once read, set as a span attribute on the entrypoint span and propagate via `Resource` or a `SpanProcessor` so all child spans inherit it.
