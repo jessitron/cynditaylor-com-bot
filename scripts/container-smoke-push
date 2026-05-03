@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+CONTAINER="cyndibot-local"
+
+if ! docker ps --format '{{.Names}}' | grep -qx "${CONTAINER}"; then
+  echo "Container ${CONTAINER} is not running. Start it with scripts/container-run-local." >&2
+  exit 1
+fi
+
+# _smoke_push_site.py pushes to a throwaway branch and deletes it. Safe.
+# Copy it in rather than baking smoke scripts into the image.
+docker cp scripts/_smoke_push_site.py "${CONTAINER}:/tmp/_smoke_push_site.py"
+
+# PYTHONPATH=/app so `from agent.tools.site_tools import ...` resolves.
+# Running as a script (not -m) means Python adds the script dir to sys.path,
+# not /app, so we set it explicitly.
+docker exec -w /app -e PYTHONPATH=/app "${CONTAINER}" python /tmp/_smoke_push_site.py

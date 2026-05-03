@@ -86,7 +86,7 @@ Goal: a Docker container serving AgentCore's HTTP contract locally, reusing all 
 - `scripts/container-smoke-invoke` — stages a greeting-style inbound via `_stage_smoke_greeting.py` (deliberately NOT the newest real inbound, so smoke tests can't accidentally trigger a site edit/push), POSTs to `/invocations`, prints the Phoenix trace URL.
 
 **Pending before Phase 2:**
-- `push_site_changes` will fail inside the container — no macOS keychain credential helper. Either set `GITHUB_TOKEN` in `.env` + `git config --global credential.helper store` in the Dockerfile, or in AgentCore proper pull from Secrets Manager on boot. Current smoke test avoids exercising push by using a greeting message.
+- ~~`push_site_changes` will fail inside the container~~ ✅ Resolved 2026-05-03 (see "Container `git push` via `GITHUB_TOKEN`" slice below).
 - The Dockerfile's `FROM python:3.12-slim` doesn't match the host's `.venv` (Python 3.14.2). `uv sync --frozen` succeeded so the lock is cross-version compatible, but worth remembering when touching deps.
 
 ## Slice: AgentCore Phase 2 — ship to AWS ✅ (greeting payload)
@@ -104,6 +104,21 @@ Done:
 - `GITHUB_TOKEN` in Secrets Manager + container-entrypoint shim. Deferred until we want to exercise `push_site_changes` from the cloud.
 - A real "edit a file" cloud smoke test. Greeting payload validates the path; first edit-and-commit invoke will be the next slice.
 - SES production access request — still in sandbox, so cyndibot can only reply to verified addresses.
+
+## Slice: Container `git push` via `GITHUB_TOKEN` ✅ (2026-05-03)
+
+Goal: push from inside the container without depending on the host's macOS keychain. Generalizes to AgentCore: same `GITHUB_TOKEN` env var, sourced from Secrets Manager later instead of `.env`.
+
+1. Fine-grained PAT scoped to `jessitron/cynditaylor-com` only, Contents: Read and write. Lives in `.env` as `GITHUB_TOKEN=...` (already passed through by `container-run-local`'s `.env` preprocessing).
+2. `scripts/container-entrypoint`: if `GITHUB_TOKEN` is set, runs `git config --global credential.helper store` and writes `~/.git-credentials` with `https://x-access-token:${GITHUB_TOKEN}@github.com`. No-ops if unset, so the cloud path doesn't break.
+3. Dockerfile uses it as `ENTRYPOINT`, with `CMD` still `python -m agent.server`. Required `.dockerignore` exception: `!scripts/container-entrypoint` because `scripts/` is excluded by default.
+4. `scripts/container-smoke-push`: `docker cp`s the existing `_smoke_push_site.py` into the running container and runs it (with `PYTHONPATH=/app` since it executes as a script, not `-m`). Pushes to throwaway branch `cyndibot-smoke-test`, verifies, deletes. No live-site impact.
+
+Verified green: full clone → edit → commit → push → cleanup cycle inside `cyndibot:local` using the token.
+
+**Not yet done:**
+- `push_site_changes` is still not wired into `agent/inbound.py`. Plan unchanged — watch one manual main-push go through first.
+- AgentCore Secrets Manager + container-entrypoint pulls token from there. Same env var name, so no entrypoint changes needed; just IAM + a one-line bootstrap to set `GITHUB_TOKEN` from a secret before exec'ing the server.
 
 ## Telemetry work
 
@@ -133,7 +148,7 @@ Not yet covered: a smoke that exercises one of the four explicit allowlist entri
 
 ## Still pending
 
-- `GITHUB_TOKEN` in Secrets Manager + container-entrypoint shim. Required before `push_site_changes` works in the cloud.
+- `GITHUB_TOKEN` in Secrets Manager so the deployed AgentCore runtime can push. Local container path is done (see slice above); cloud just needs the secret + IAM + a small bootstrap to load it into the env before the entrypoint runs.
 - Real "edit a file" cloud smoke test (greeting payload only validated the parse+reply path; the lambda smoke is also greeting-style).
 - SES production access request so mom can actually send email to the bot.
 - **Unreplyable-recipient error visibility.** When the agent tries to `send_reply` to an address SES can't deliver to (sandbox: unverified identity; prod: hard bounce), the current tool returns `success` as long as the SES API call returns a Message-ID — silent failure from the agent's POV. Test by sending an inbound from an unverified address, then verify we surface the failure somewhere actionable (SES bounce SNS topic? agent-side preflight check against verified identities? a "delivery failed" reply to a fallback address?). Discovered when the first real-mom-style email landed in Gmail spam — different failure mode but same observability gap.

@@ -12,6 +12,8 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 COPY agent ./agent
+COPY scripts/container-entrypoint /usr/local/bin/container-entrypoint
+RUN chmod +x /usr/local/bin/container-entrypoint
 
 ENV PATH="/app/.venv/bin:${PATH}"
 ENV PYTHONUNBUFFERED=1
@@ -27,4 +29,5 @@ ENV LANGFUSE_BASE_URL=langfuse-stub-for-honeycomb
 
 EXPOSE 8080
 
+ENTRYPOINT ["/usr/local/bin/container-entrypoint"]
 CMD ["python", "-m", "agent.server"]

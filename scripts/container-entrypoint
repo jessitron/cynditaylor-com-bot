@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# If GITHUB_TOKEN is present, configure git so `git push https://github.com/...`
+# authenticates as the token owner. AgentCore later will inject this same env
+# var from Secrets Manager; locally it comes from .env via --env-file.
+#
+# x-access-token is the username GitHub expects for token-based HTTPS auth;
+# the token itself is the password. credential.helper=store reads from
+# ~/.git-credentials, which we write here.
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  git config --global credential.helper store
+  printf 'https://x-access-token:%s@github.com\n' "${GITHUB_TOKEN}" > ~/.git-credentials
+  chmod 600 ~/.git-credentials
+fi
+
+exec "$@"

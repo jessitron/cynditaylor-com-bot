@@ -11,6 +11,7 @@ conversation_history/
 .be/
 notes/
 scripts/
+!scripts/container-entrypoint
 infra/
 *.md
 .env
