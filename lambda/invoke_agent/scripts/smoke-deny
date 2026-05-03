@@ -15,6 +15,7 @@ cd "$(dirname "$0")/.."
 source ./config.env
 
 DENY_SENDER="${DENY_SENDER:-stranger@example.com}"
+AGENT_USERNAME="${AGENT_USERNAMES%%,*}"
 RECIPIENT="${AGENT_USERNAME}@${AGENT_DOMAIN}"
 LOG_GROUP="/aws/lambda/${LAMBDA_NAME}"
 START_MS=$(python3 -c "import time; print(int(time.time()*1000))")

@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
 # End-to-end smoke for the SES -> Lambda -> AgentCore wiring.
 #
-#   1. Send pretend-mom email via SES to cyndi@<AGENT_DOMAIN>.
+#   1. Send pretend-mom email via SES to <alias>@<AGENT_DOMAIN>.
 #   2. Wait for the SES receipt rule to drop the raw MIME in S3.
 #   3. Poll CloudWatch with filter-log-events for the dispatcher's
 #      "invoking agent runtime" line — that's the proof.
 #   4. Wait for the agent's reply to land in S3 (separate object).
+#
+# Usage: smoke [alias]
+#   alias defaults to the first entry of AGENT_USERNAMES from config.env.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # shellcheck disable=SC1091
 source ./config.env
+AGENT_USERNAME="${1:-${AGENT_USERNAMES%%,*}}"
 export AGENT_DOMAIN AGENT_USERNAME AWS_REGION
 
 LOG_GROUP="/aws/lambda/${LAMBDA_NAME}"

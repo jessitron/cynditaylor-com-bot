@@ -1,10 +1,10 @@
-"""Send a synthetic pretend-mom email TO cyndi@<domain> via SES.
+"""Send a synthetic pretend-mom email TO <AGENT_USERNAME>@<domain> via SES.
 
-The dispatcher Lambda's recipient filter is configured on AGENT_USERNAME
-(default `cyndi`), so this address is the one that should trigger an
-AgentCore invoke. A simple greeting is used so we don't burn site-edit
-work on a smoke test — the agent will parse, see no edit is requested,
-and send a short reply.
+The dispatcher Lambda accepts a set of aliases (CYNDIBOT_AGENT_USERNAMES,
+e.g. cyndi,bot,robot,jeeves). The caller (smoke) selects which alias to
+exercise and exports it as AGENT_USERNAME before running this script. A
+simple greeting is used so we don't burn site-edit work on a smoke test —
+the agent will parse, see no edit is requested, and send a short reply.
 """
 
 from __future__ import annotations

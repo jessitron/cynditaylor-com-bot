@@ -32,11 +32,15 @@ logger.setLevel(logging.INFO)
 REGION = os.environ.get("AWS_REGION", "us-west-2")
 RUNTIME_ARN = os.environ["CYNDIBOT_AGENT_RUNTIME_ARN"]
 INBOUND_PREFIX = os.environ.get("CYNDIBOT_INBOUND_PREFIX", "emails/")
-AGENT_USERNAME = os.environ.get("CYNDIBOT_AGENT_USERNAME", "cyndi")
 AGENT_DOMAIN = os.environ.get(
     "CYNDIBOT_AGENT_DOMAIN", "cyndibot.jessitron.honeydemo.io"
 )
-AGENT_RECIPIENT = f"{AGENT_USERNAME}@{AGENT_DOMAIN}".lower()
+AGENT_USERNAMES = frozenset(
+    u.strip().lower()
+    for u in os.environ.get("CYNDIBOT_AGENT_USERNAMES", "cyndi").split(",")
+    if u.strip()
+)
+AGENT_RECIPIENTS = frozenset(f"{u}@{AGENT_DOMAIN}".lower() for u in AGENT_USERNAMES)
 
 HONEYCOMB_API_KEY = os.environ["HONEYCOMB_API_KEY"]
 HONEYCOMB_DATASET = os.environ.get("HONEYCOMB_DATASET", "cyndibot-dispatcher")
@@ -62,11 +66,11 @@ def _runtime_session_id(sender: str) -> str:
     return f"mom-{digest}"
 
 
-def _agent_recipient_match(recipients: list[str]) -> bool:
+def _matched_agent_recipient(recipients: list[str]) -> str | None:
     for r in recipients:
-        if r and r.lower() == AGENT_RECIPIENT:
-            return True
-    return False
+        if r and r.lower() in AGENT_RECIPIENTS:
+            return r.lower()
+    return None
 
 
 def _sender_allowed(addr: str) -> bool:
@@ -137,7 +141,7 @@ def handler(event, context):
         "event_id": str(uuid.uuid4()),
         "faas.invocation_id": getattr(context, "aws_request_id", "") or "",
         "faas.name": getattr(context, "function_name", "") or "",
-        "email.to.agent": AGENT_RECIPIENT,
+        "email.to.agent_addresses": ",".join(sorted(AGENT_RECIPIENTS)),
         "dispatcher.outcome": "unknown",
         "dispatcher.agent_invoked": False,
     }
@@ -159,7 +163,7 @@ def handler(event, context):
         message_id = mail.get("messageId") or ""
         recipients = receipt.get("recipients") or []
         sender_domain = sender.partition("@")[2].lower()
-        recipient_match = _agent_recipient_match(recipients)
+        matched_recipient = _matched_agent_recipient(recipients)
 
         fields.update(
             {
@@ -169,7 +173,8 @@ def handler(event, context):
                 "email.message_id": message_id,
                 "email.to": ",".join(recipients),
                 "email.to.count": len(recipients),
-                "email.to.matched_agent": recipient_match,
+                "email.to.matched_agent": matched_recipient is not None,
+                "email.to.matched_address": matched_recipient or "",
             }
         )
 
@@ -181,10 +186,10 @@ def handler(event, context):
             recipients,
         )
 
-        if not recipient_match:
+        if matched_recipient is None:
             logger.info(
-                "recipient does not match %s; skipping (this address is for raw S3 capture only)",
-                AGENT_RECIPIENT,
+                "recipient does not match any of %s; skipping (this address is for raw S3 capture only)",
+                sorted(AGENT_RECIPIENTS),
             )
             fields["dispatcher.outcome"] = "skipped_recipient_filter"
             return {"status": "skipped", "reason": "recipient_filter", "recipients": recipients}
