@@ -89,6 +89,16 @@ def write_site_file_impl(path: str, content: str) -> dict[str, Any]:
     }
 
 
+def delete_site_file_impl(path: str) -> dict[str, Any]:
+    target = _validate_path(path)
+    if not target.exists():
+        raise FileNotFoundError(f"no such file in workspace: {path!r}")
+    if target.is_dir():
+        raise IsADirectoryError(f"refusing to delete directory: {path!r}")
+    target.unlink()
+    return {"deleted": str(target.relative_to(WORKSPACE_DIR))}
+
+
 def commit_site_changes_impl(message: str) -> dict[str, Any]:
     _run_git("add", "-A")
     status = _run_git("status", "--porcelain").strip()
@@ -158,6 +168,21 @@ def write_site_file(path: str, content: str) -> dict[str, Any]:
         Dict with path and bytes written.
     """
     return write_site_file_impl(path, content)
+
+
+@tool
+def delete_site_file(path: str) -> dict[str, Any]:
+    """Delete a single file from the site workspace.
+
+    Use this to drop attachments parse_inbound wrote into images/ that
+    you don't want to keep, before commit_site_changes runs git add -A.
+
+    Args:
+        path: Path relative to the workspace root. Absolute paths and
+            anything under .git are rejected. Raises if the path doesn't
+            exist or is a directory.
+    """
+    return delete_site_file_impl(path)
 
 
 @tool

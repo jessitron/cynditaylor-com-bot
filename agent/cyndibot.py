@@ -4,6 +4,7 @@ from strands.models import BedrockModel
 from agent.tools.email_tools import parse_inbound, send_reply
 from agent.tools.site_tools import (
     commit_site_changes,
+    delete_site_file,
     list_site_files,
     push_site_changes,
     read_site_file,
@@ -74,6 +75,7 @@ def build_agent() -> Agent:
             list_site_files,
             read_site_file,
             write_site_file,
+            delete_site_file,
             commit_site_changes,
             push_site_changes,
         ],
