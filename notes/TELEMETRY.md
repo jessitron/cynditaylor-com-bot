@@ -20,7 +20,7 @@ Strands' OTel telemetry now lands in Honeycomb as queryable individual columns (
 
 `scripts/_probe_strands_langfuse.py` — 5-line check that confirms `is_langfuse` and `use_latest_genai_conventions` are both `True` without sending a trace. Useful to flip first when something's wrong.
 
-The full setup (with traps and verification queries) is captured as a Claude Code skill at `notes/skills/strands-honeycomb-tracing/SKILL.md` so other agents can replicate it.
+The full setup (with traps and verification queries) is captured as a Claude Code skill at `notes/skills/strands-honeycomb-tracing/SKILL.md` so other agents can replicate it. The skill documents both the producer-side `LANGFUSE_BASE_URL` trick and the collector-side OTTL `merge_maps` alternative — pick one, don't run both.
 
 ## Done: drop the redundant span events — Boswell ✅
 

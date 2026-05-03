@@ -70,6 +70,7 @@ OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental
 # Trap 3: trip Strands' is_langfuse heuristic so those JSON arrays land on
 # span attributes (Honeycomb-queryable) in addition to span events.
 # The literal substring "langfuse" is what matters; the rest is documentation.
+# *** Skip this if you're solving trap 3 in a collector — see next section. ***
 LANGFUSE_BASE_URL=langfuse-stub-for-honeycomb
 ```
 
@@ -80,6 +81,35 @@ Optional but useful:
 # Append to the existing OTEL_SEMCONV_STABILITY_OPT_IN list, comma-separated.
 OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental,gen_ai_tool_definitions
 ```
+
+### 4. Alternative: solve trap 3 in a collector instead of via `LANGFUSE_BASE_URL`
+
+If you already have (or want) an OTel Collector in your pipeline, do the event-to-attribute lift there. The producer then stays standards-compliant (vanilla `gen_ai.*` events on span events, where the OTel spec puts them) and you get the same Honeycomb-queryable columns. Bonus: the collector approach works for any GenAI instrumentation library, not just Strands — there's nothing Strands-specific about it.
+
+OTTL transform that does the lift:
+
+```yaml
+processors:
+  transform/lift_event_attrs:
+    trace_statements:
+      - context: spanevent
+        statements:
+          - merge_maps(span.attributes, attributes, "upsert")
+          - keep_keys(attributes, [])
+
+  filter/drop_empty_events:
+    traces:
+      spanevent:
+        - 'true'
+```
+
+`spanevent` context runs once per span event. `span.attributes` is the parent span's attrs (writable from this context); `merge_maps(target, source, "upsert")` copies the event's attrs onto the parent span. The `filter` then drops every span event (now redundant). Wire both into a `traces` pipeline and the gen_ai message arrays land as columns on the parent span.
+
+**Tradeoff:** producer-side (`LANGFUSE_BASE_URL`) is zero infrastructure but Strands-specific and depends on a substring heuristic that could change. Collector-side requires running a collector but is portable, doesn't relyon Strands internals, and gives you a place to do other ingest hygiene (PII redaction, attribute renaming, sampling, provenance stamping).
+
+**Don't do both.** With the env var set AND the collector lift, the gen_ai message arrays land twice — once from Strands' direct `set_attributes` call, once from the collector's `merge_maps`. They overwrite to the same value (the operation is `upsert`), so it's harmless but wasteful. Pick one. If you're starting with the env var and bringing up a collector later, drop the env var when you wire the collector in.
+
+If you need a collector deployment recipe, see `notes/skills/otel-collector-on-lambda/SKILL.md` (this project deploys "Boswell" — an OTel collector as a Lambda Function URL — that does exactly this lift). For the provenance-stamping pattern that pairs with it, see `notes/skills/collector-pipeline-provenance/SKILL.md`.
 
 ## Verification
 
@@ -130,7 +160,7 @@ Both must be `True` before there's any point shipping a trace.
 
 ## Why this works (one-paragraph version)
 
-Strands has its own OTel GenAI instrumentation that emits well-shaped `gen_ai.*` attributes following the spec. The spec says message bodies belong on span *events*, which is correct for log-style backends but wrong for column-oriented backends like Honeycomb. The OpenInference Strands processor exists to translate Strands' GenAI shape into Phoenix's OpenInference schema, but it does so by also stuffing leftover attrs into a single JSON blob — bad for any column-oriented UI. Skipping the processor and toggling the two env vars (`OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` and `LANGFUSE_BASE_URL=langfuse-*`) is enough to get clean, individual, queryable columns plus messages on spans.
+Strands has its own OTel GenAI instrumentation that emits well-shaped `gen_ai.*` attributes following the spec. The spec says message bodies belong on span *events*, which is correct for log-style backends but wrong for column-oriented backends like Honeycomb. The OpenInference Strands processor exists to translate Strands' GenAI shape into Phoenix's OpenInference schema, but it does so by also stuffing leftover attrs into a single JSON blob — bad for any column-oriented UI. Skipping the processor, setting `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental`, and then either tripping the `is_langfuse` heuristic with `LANGFUSE_BASE_URL=langfuse-*` (no collector) or running the OTTL `merge_maps` lift in a collector (see § 4) gets you clean, individual, queryable columns plus messages on spans.
 
 ## Source-of-truth code references
 
