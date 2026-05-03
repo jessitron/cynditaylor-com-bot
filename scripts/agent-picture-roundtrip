@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# End-to-end smoke test of the picture-attachment flow through the
+# full LLM loop:
+#   1. Stage a synthetic inbound (HEIC + JPEG attachments) in S3.
+#   2. Run the agent on that S3 key.
+#   3. Print the Phoenix trace URL.
+#
+# The body says "no site change expected" -- the agent should reply
+# with a clarifying question and NOT push to mom's live site. The
+# attachments will land in <workspace>/images/ briefly; sync_workspace
+# on the next run cleans them up.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source .env
+
+echo "=== Staging picture inbound in S3 ==="
+KEY=$(uv run python scripts/_stage_picture_inbound.py)
+echo "staged: s3://cyndibot-incoming-emails/${KEY}"
+echo
+
+echo "=== Running agent ==="
+uv run python -m agent.inbound "${KEY}"
+echo
+
+echo "=== Latest Phoenix trace ==="
+scripts/check-last-span
