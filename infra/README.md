@@ -160,7 +160,7 @@ Policy documents live in `infra/iam/` so they're reviewable:
 | AgentCoreWorkloadIdentity | `GetWorkloadAccessToken*` — baseline AgentCore. |
 | BedrockClaudeInvoke | Invoke/converse on Anthropic foundation models + `us.anthropic.*` inference profiles in our account. |
 | InboundMailBucket | `s3:GetObject` on `cyndibot-incoming-emails/*` — read inbound emails. |
-| SesSendFromBot | `ses:SendEmail` + `SendRawEmail` on the `cyndibot.jessitron.honeydemo.io` identity. |
+| SesSendFromBot | `ses:SendEmail` + `SendRawEmail` on `identity/*` (any verified SES identity in this account, so the From and any sandbox-verified recipient both authorize). |
 
 ### Commands run (state-changing)
 
@@ -352,3 +352,18 @@ The container's entrypoint (`scripts/container-entrypoint`) checks at startup: i
 Before pushing the new image to ECR, validated the fetch path locally: `scripts/container-run-local --from-secret` strips `GITHUB_TOKEN` from the env file passed to docker, so the entrypoint exercises the boto3 fetch using local AWS creds (`~/.aws` is mounted into the container). `scripts/container-smoke-push` then pushed to a throwaway branch, confirming auth.
 
 Cloud verification was indirect: the post-update greeting smoke (`scripts/agentcore-smoke-invoke`) returned 200. The entrypoint always runs the fetch in the cloud (GITHUB_TOKEN is never set there, GITHUB_TOKEN_SECRET_ARN always is), so a successful boot proves the IAM grant + secret fetch worked. A push-driven smoke will come once `push_site_changes` is wired into the agent.
+
+## 2026-05-03 — Broaden SesSendFromBot to all identities
+
+Caught via Honeycomb trace `d732e523c736750ab48b83c7a4117004`: a cloud roundtrip failed with `AccessDeniedException` on `ses:SendRawEmail`, naming `identity/jessitron@gmail.com` as the resource. SES (in sandbox mode) IAM-checks both the From and the recipient identities; the policy only allowed `identity/cyndibot.jessitron.honeydemo.io`, so the recipient check failed.
+
+Updated `infra/iam/cyndibot-agent-runtime-policy.json`: `SesSendFromBot.Resource` now `arn:aws:ses:us-west-2:414852377253:identity/*` (any verified identity in the account). Reapplied:
+
+```bash
+aws iam put-role-policy \
+  --role-name CyndibotAgentRuntime \
+  --policy-name CyndibotAgentRuntimeInline \
+  --policy-document file://infra/iam/cyndibot-agent-runtime-policy.json
+```
+
+Sandbox-mode delivery still requires each recipient to be a verified SES identity; this change just makes IAM stop blocking before SES gets a chance to do its own sandbox check.

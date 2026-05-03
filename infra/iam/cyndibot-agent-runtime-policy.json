@@ -84,7 +84,7 @@
         "ses:SendRawEmail"
       ],
       "Resource": [
-        "arn:aws:ses:us-west-2:414852377253:identity/cyndibot.jessitron.honeydemo.io"
+        "arn:aws:ses:us-west-2:414852377253:identity/*"
       ]
     },
     {
