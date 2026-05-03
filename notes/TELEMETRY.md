@@ -32,12 +32,11 @@ Built `collector/` (a.k.a. **Boswell**), an OTel collector as a Lambda container
 - `scripts/agentcore-env-dry-run` prints the env-var JSON without applying — handy when fiddling with the wiring.
 - Skills written: `notes/skills/otel-collector-on-lambda/SKILL.md` (the deployment shape, six gotchas paid in blood) and `notes/skills/collector-pipeline-provenance/SKILL.md` (the three-attribute pattern).
 
-**Producer-side decisions still live:**
-- `LANGFUSE_BASE_URL=langfuse-stub-for-honeycomb` — keeps Strands writing JSON message arrays as span attributes alongside the events. The collector cleanup makes the events redundant; we *could* unset this once Boswell is wired in, but the duplication is harmless and removing the env var is a separate cleanup.
+**`LANGFUSE_BASE_URL` is no longer set on the producer.** The env var used to trip Strands' `is_langfuse` heuristic so messages landed as span attributes. Boswell's OTTL `transform/lift_event_attrs` does the same job from the collector side — verified after removal: all 3 `chat` spans in the post-cutover smoke trace still have `gen_ai.input.messages` and `gen_ai.output.messages` populated as columns. Trace `e9fc3ef5995897f7f9ad8e3265e145b5` is the reference.
 
-Reference points if we ever revisit producer-side instead:
+If we ever pull Boswell back out of the path, restore `LANGFUSE_BASE_URL=langfuse-stub-for-honeycomb` to keep the columns. Reference points in Strands:
 - `strands/telemetry/tracer.py:241` (`_add_event`) — the `to_span_attributes` knob.
-- `strands/telemetry/tracer.py:114` (`is_langfuse`) — the heuristic we're tripping.
+- `strands/telemetry/tracer.py:114` (`is_langfuse`) — the heuristic.
 - All call sites with `to_span_attributes=self.is_langfuse`: lines 357, 417, 472, 563, 660, 766, 842, 864.
 
 ## TODO: stamp `session.id` on every agent span
