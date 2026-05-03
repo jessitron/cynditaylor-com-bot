@@ -30,7 +30,6 @@ Built `collector/` (a.k.a. **Boswell**), an OTel collector as a Lambda container
 - Boswell deployed at `https://45exz5ki5veyvldhaojdynf3ty0pqnno.lambda-url.us-west-2.on.aws/`. Bearer token in `collector/.env` (gitignored).
 - **AgentCore is wired to Boswell.** `scripts/_build_agentcore_env_json.py` now requires `BOSWELL_FUNCTION_URL` and `INGEST_BEARER_TOKEN` and ships traces via the collector. `scripts/agentcore-update` sources `collector/.env` and resolves the function URL via `aws lambda get-function-url-config`. Verified via smoke invoke: spans land in Honeycomb stamped with `collector.boswell="washere"` (version `2b18738`). Pre-wiring spans don't have the attribute, so `WHERE collector.boswell exists` cleanly separates "via Boswell" from legacy traffic.
 - `scripts/agentcore-env-dry-run` prints the env-var JSON without applying — handy when fiddling with the wiring.
-- Orphan resources from the rename: ECR repo `cyndibot-collector` and IAM role `CyndibotCollectorLambda` still exist (free, but worth deleting eventually).
 - Skills written: `notes/skills/otel-collector-on-lambda/SKILL.md` (the deployment shape, six gotchas paid in blood) and `notes/skills/collector-pipeline-provenance/SKILL.md` (the three-attribute pattern).
 
 **Producer-side decisions still live:**

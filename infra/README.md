@@ -289,12 +289,29 @@ Field naming: dispatcher-specific fields use `dispatcher.*` (e.g. `dispatcher.ou
 Self-contained module. Owns its own ECR repo, IAM role, Lambda, and Function URL. State-changing commands (ECR repo, IAM role, Lambda CRUD) are driven by scripts in `collector/scripts/`. Run order on first deploy:
 
 ```bash
-collector/scripts/bootstrap         # creates ECR repo cyndibot-collector + IAM role CyndibotCollectorLambda
+collector/scripts/bootstrap         # creates ECR repo boswell + IAM role BoswellCollectorLambda
 collector/scripts/build
 collector/scripts/push-ecr
-collector/scripts/deploy            # creates lambda cyndibot-collector + function URL (auth=NONE)
+collector/scripts/deploy            # creates lambda boswell + function URL (auth=NONE)
 ```
 
 Function URL auth is `NONE` because the collector enforces a bearer token internally; the OTel Python SDK doesn't sign with Sigv4, so IAM auth would mean writing a custom signing exporter. Bearer token lives in `collector/.env` (gitignored), generated at `bootstrap` time.
+
+### 2026-05-03: collector renamed cyndibot-collector → boswell, orphans deleted
+
+The collector was originally named `cyndibot-collector`; renamed to `boswell` (per `collector/config.env`). The orphan resources from the rename were deleted today:
+
+```bash
+aws iam detach-role-policy \
+  --role-name CyndibotCollectorLambda \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+aws iam delete-role --role-name CyndibotCollectorLambda
+aws ecr delete-repository \
+  --repository-name cyndibot-collector \
+  --region us-west-2 \
+  --force
+```
+
+Active replacements: ECR repo `boswell`, IAM role `BoswellCollectorLambda`, Lambda `boswell`.
 
 When state actually gets created, append a dated section here with the same shape as the AgentCore entries above.
