@@ -4,11 +4,16 @@ from email.message import EmailMessage
 from typing import Any
 
 import boto3
+from opentelemetry import trace
 from strands import tool
 
 INBOUND_BUCKET = "cyndibot-incoming-emails"
 SES_REGION = "us-west-2"
 REPLY_FROM = "Cyndibot <bot@cyndibot.jessitron.honeydemo.io>"
+
+# https://aws.amazon.com/ses/pricing/ — marginal rate after free tier.
+SES_SEND_PRICE_USD = 0.0001
+SES_RECEIPT_PRICE_USD = 0.0001
 
 
 def _best_body(msg: EmailMessage, content_type: str) -> str:
@@ -22,6 +27,10 @@ def parse_inbound_impl(s3_key: str) -> dict[str, Any]:
     s3 = boto3.client("s3")
     raw = s3.get_object(Bucket=INBOUND_BUCKET, Key=s3_key)["Body"].read()
     msg: EmailMessage = email.message_from_bytes(raw, policy=policy.default)  # type: ignore[assignment]
+
+    span = trace.get_current_span()
+    span.set_attribute("cost.ses.receipt.qty", 1)
+    span.set_attribute("cost.ses.receipt.price", SES_RECEIPT_PRICE_USD)
 
     return {
         "from": str(msg.get("From", "")),
@@ -57,6 +66,11 @@ def send_reply_impl(
     resp = ses.send_email(
         Content={"Raw": {"Data": reply.as_bytes()}},
     )
+
+    span = trace.get_current_span()
+    span.set_attribute("cost.ses.send.qty", 1)
+    span.set_attribute("cost.ses.send.price", SES_SEND_PRICE_USD)
+
     # SES replaces the Message-ID header on raw send. The delivered message's
     # Message-ID is <{MessageId}@us-west-2.amazonses.com>; that's what will
     # appear in any In-Reply-To if the recipient replies.
