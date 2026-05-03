@@ -1,9 +1,10 @@
-"""Assert the dispatcher Lambda sent a Honeycomb event after the most recent invoke.
+"""Assert the dispatcher Lambda sent a Honeycomb event with a given outcome.
 
-Polls CloudWatch for a `honeycomb event sent: event_id=<id> outcome=<outcome>`
-log line emitted since the given start-time, asserts the outcome matches what
-the smoke caller expected, and prints `event_id=<id>` on success so the caller
-(and the Honeycomb MCP) can look up that exact row.
+Polls CloudWatch for `honeycomb event sent: event_id=<id> outcome=<outcome>`
+log lines since the given start-time, prints all of them, and passes if any
+match the expected outcome. The full smoke roundtrip generates two invocations
+(original inbound → invoked, agent's reply → skipped_recipient_filter), so we
+can't just take the first match.
 
 Usage:
     _verify_honeycomb_event.py <log-group> <region> <since-millis> <expected-outcome> [--timeout-s N]
@@ -43,6 +44,21 @@ def _filter_log_events(log_group: str, region: str, since_ms: int) -> list[dict]
         return []
 
 
+def _parse(events: list[dict]) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for ev in events:
+        m = PATTERN.search(ev.get("message", ""))
+        if not m:
+            continue
+        event_id, outcome = m.group(1), m.group(2)
+        if event_id in seen:
+            continue
+        seen.add(event_id)
+        pairs.append((event_id, outcome))
+    return pairs
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("log_group")
@@ -53,30 +69,37 @@ def main() -> int:
     args = p.parse_args()
 
     deadline = time.time() + args.timeout_s
+    pairs: list[tuple[str, str]] = []
     while time.time() < deadline:
-        for ev in _filter_log_events(args.log_group, args.region, args.since_ms):
-            m = PATTERN.search(ev.get("message", ""))
-            if not m:
-                continue
-            event_id, outcome = m.group(1), m.group(2)
-            if outcome != args.expected_outcome:
-                print(
-                    f"FAIL: honeycomb event outcome={outcome}, expected {args.expected_outcome}",
-                    file=sys.stderr,
-                )
-                print(f"event_id={event_id}", file=sys.stderr)
-                return 1
-            print(f"event_id={event_id}")
-            print(f"outcome={outcome}")
-            return 0
+        pairs = _parse(_filter_log_events(args.log_group, args.region, args.since_ms))
+        if any(outcome == args.expected_outcome for _, outcome in pairs):
+            break
         time.sleep(2)
 
-    print(
-        f"FAIL: no 'honeycomb event sent' log line within {args.timeout_s}s "
-        f"(log group {args.log_group}, since {args.since_ms})",
-        file=sys.stderr,
-    )
-    return 1
+    if not pairs:
+        print(
+            f"FAIL: no 'honeycomb event sent' log line within {args.timeout_s}s "
+            f"(log group {args.log_group}, since {args.since_ms})",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"events sent ({len(pairs)}):")
+    matched = False
+    for event_id, outcome in pairs:
+        marker = "  *" if outcome == args.expected_outcome and not matched else "   "
+        print(f"{marker} event_id={event_id} outcome={outcome}")
+        if outcome == args.expected_outcome:
+            matched = True
+
+    if not matched:
+        print(
+            f"FAIL: no event with expected outcome={args.expected_outcome}",
+            file=sys.stderr,
+        )
+        return 1
+
+    return 0
 
 
 if __name__ == "__main__":

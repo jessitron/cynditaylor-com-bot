@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# List Honeycomb dispatcher events the Lambda has sent in the last N minutes
+# (default 10), and optionally assert at least one matches a given outcome.
+#
+# Useful when smoke just ran and you want to re-check the verifier output
+# without re-running the full SES roundtrip.
+#
+# Usage:
+#   scripts/check-recent-events                              # last 10m, no outcome assertion
+#   scripts/check-recent-events 30                           # last 30m
+#   scripts/check-recent-events 10 invoked                   # assert at least one outcome=invoked
+#   scripts/check-recent-events 10 skipped_recipient_filter
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+MINUTES="${1:-10}"
+EXPECTED_OUTCOME="${2:-}"
+LOG_GROUP="/aws/lambda/${LAMBDA_NAME}"
+SINCE_MS=$(python3 -c "import time, sys; print(int((time.time()-int(sys.argv[1])*60)*1000))" "${MINUTES}")
+
+if command -v uv >/dev/null 2>&1; then
+  PY="uv run python"
+else
+  PY="python3"
+fi
+
+if [[ -z "${EXPECTED_OUTCOME}" ]]; then
+  # No assertion — just list. Pass a sentinel that won't match real outcomes
+  # so the verifier's "did we see any" check always reports the listing.
+  EXPECTED_OUTCOME="__list_only__"
+fi
+
+${PY} scripts/_verify_honeycomb_event.py \
+  "${LOG_GROUP}" "${AWS_REGION}" "${SINCE_MS}" "${EXPECTED_OUTCOME}" \
+  --timeout-s 5 \
+  || EXIT=$?
+
+# When called in list-only mode, suppress the "no event with expected outcome"
+# failure since the user didn't specify one.
+if [[ "${EXPECTED_OUTCOME}" == "__list_only__" ]]; then
+  exit 0
+fi
+exit "${EXIT:-0}"
