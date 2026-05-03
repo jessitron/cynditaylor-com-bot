@@ -65,7 +65,7 @@
 
 1. ✅ `push_site_changes_impl(remote_branch="main")` shells out to `git push`; the `@tool` wrapper is no-arg and main-only. No `GITHUB_TOKEN` plumbing — relies on the local git credential helper (macOS keychain works out of the box).
 2. ✅ `scripts/smoke-push-site` pushes HEAD to `origin/cyndibot-smoke-test`, verifies via `ls-remote`, deletes the branch. Auth path confirmed without touching `main`.
-3. Pending decision: when do we wire `push_site_changes` into `agent/inbound.py`? Current plan is to watch one manual main-push go through first.
+3. ✅ Wired into the agent (commit `b6aff63`): `push_site_changes` is in the tool list in `agent/cyndibot.py`, and the system prompt in step 7 says "Call commit_site_changes, then push_site_changes." A matching changelog convention was seeded so `pretend-`/`smoketest-` senders get `[TEST]`-prefixed entries in `changelog.html`.
 
 ## Slice: AgentCore Phase 1 — local container ✅
 
@@ -153,7 +153,7 @@ Tracked separately in `notes/TELEMETRY.md` — Honeycomb-friendly tracing is don
 
 Not yet covered: a smoke that exercises one of the four explicit allowlist entries with a real external sender. Plan for next session: send a real email from `jessitron@jessitron.com` (already verified for SES outbound, so the agent's reply will deliver back) and watch the lambda log + S3 reply.
 
-**One Honeycomb event per email (added 2026-05-03):** dispatcher now POSTs a single event per invocation to dataset `cyndibot-dispatcher` (env `cynditaylor-com-bot`, team `modernity`) covering every code path — noop / skipped_recipient_filter / skipped_sender_not_allowed / missing_message_id / agent_invoke_failed / invoked. Sent synchronously via the Events API in a `finally` block; failures log a warning but never raise (a raise would trigger SES's async retry, double-invoking AgentCore on success). Field naming uses `dispatcher.*`, `email.*`, and OTel-standard `session.id` / `aws.s3.key` / `faas.invocation_id` / `faas.name` to keep room for the agent's spans to stamp the same column names later. Verified via `smoke-deny`: event_id round-trips from the Lambda log into Honeycomb. See `notes/TELEMETRY.md` "TODO: stamp `session.id` on every agent span" for the next slice that completes the cross-dataset join.
+**One Honeycomb event per email (added 2026-05-03):** dispatcher now POSTs a single event per invocation to dataset `cyndibot-dispatcher` (env `cynditaylor-com-bot`, team `modernity`) covering every code path — noop / skipped_recipient_filter / skipped_sender_not_allowed / missing_message_id / agent_invoke_failed / invoked. Sent synchronously via the Events API in a `finally` block; failures log a warning but never raise (a raise would trigger SES's async retry, double-invoking AgentCore on success). Field naming uses `dispatcher.*`, `email.*`, and OTel-standard `session.id` / `aws.s3.key` / `faas.invocation_id` / `faas.name` to keep room for the agent's spans to stamp the same column names later. Verified via `smoke-deny`: event_id round-trips from the Lambda log into Honeycomb. Cross-dataset join is now wired — see `notes/TELEMETRY.md` "Done: stamp `session.id` on every agent span".
 
 **SES verification status (as of 2026-05-03):**
 - Verified for outbound replies: `cyndibot.jessitron.honeydemo.io` (domain), `jessitron@jessitron.com`.
@@ -162,7 +162,6 @@ Not yet covered: a smoke that exercises one of the four explicit allowlist entri
 
 ## Still pending
 
-- Wire `push_site_changes` into `agent/inbound.py` (tool list + prompt). Plan was to watch one manual main-push go through first.
 - Real "edit a file" cloud smoke test (greeting payload only validated the parse+reply path; the lambda smoke is also greeting-style). Will exercise the Secrets Manager fetch through to an actual `git push` in the cloud.
 - SES production access request so mom can actually send email to the bot.
 - **Unreplyable-recipient error visibility.** When the agent tries to `send_reply` to an address SES can't deliver to (sandbox: unverified identity; prod: hard bounce), the current tool returns `success` as long as the SES API call returns a Message-ID — silent failure from the agent's POV. Test by sending an inbound from an unverified address, then verify we surface the failure somewhere actionable (SES bounce SNS topic? agent-side preflight check against verified identities? a "delivery failed" reply to a fallback address?). Discovered when the first real-mom-style email landed in Gmail spam — different failure mode but same observability gap.

@@ -39,12 +39,17 @@ If we ever pull Boswell back out of the path, restore `LANGFUSE_BASE_URL=langfus
 - `strands/telemetry/tracer.py:114` (`is_langfuse`) — the heuristic.
 - All call sites with `to_span_attributes=self.is_langfuse`: lines 357, 417, 472, 563, 660, 766, 842, 864.
 
-## TODO: stamp `session.id` on every agent span
+## Done: stamp `session.id` on every agent span ✅
 
-The dispatcher Lambda's per-email events (dataset `cyndibot-dispatcher`) carry `session.id = mom-<sha256(from)>` — same value the dispatcher passes to AgentCore as `runtimeSessionId`. The agent's traces (dataset `cynditaylor-com-bot`) do **not** currently have a `session.id` column at all (verified 2026-05-03 via `find_columns`). Strands and `BedrockInstrumentor` don't emit it, and AgentCore doesn't inject it.
+`session.id` (OTel semconv-standard) now lands as a queryable column on every span the agent emits — `agent.invocation`, `invoke_agent Strands Agents`, `execute_event_loop_cycle`, `chat`, `bedrock.converse_stream`, `execute_tool *`. Verified 2026-05-03 in Honeycomb dataset `cynditaylor-com-bot`: 13/13 spans of the cloud smoke trace `smoke-first-cloud-invoke-1777840418-cyndibot-runtime` carry the column. Cross-dataset join with the dispatcher's `cyndibot-dispatcher` events now works on a single column name.
 
-Goal: add `session.id` (OTel semconv-standard name) as a span attribute on every agent span, with the same value the dispatcher used. Then the dispatcher's per-email event row joins to the agent's trace by a single column name across two datasets.
+Two changes were load-bearing:
 
-Sketch:
-- `agent/server.py::invoke(payload)` is the AgentCore entrypoint; it currently only receives `{"s3_key": ...}`. The `runtimeSessionId` is set by the caller (`bedrock-agentcore.invoke_agent_runtime(runtimeSessionId=...)`) and is available to the running container — check whether AgentCore exposes it via env var or request context (e.g. `bedrock_agentcore` SDK), or have the dispatcher add it to the payload as a fallback.
-- Once read, set as a span attribute on the entrypoint span and propagate via `Resource` or a `SpanProcessor` so all child spans inherit it.
+1. **`bedrock_agentcore.runtime.context.RequestContext`** — AgentCore inspects the entrypoint signature and, if it sees `(payload, context)` (parameter literally named `context`), passes the request context with `.session_id` populated from the `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id` header. `agent/server.py::invoke` now takes the context and passes `session_id` into `_get_agent`.
+2. **`session.id` as a Resource attribute, not a span attribute.** AgentCore guarantees one microVM per session for the microVM's entire lifetime (see [AWS docs](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-sessions.html): "Each user session in AgentCore Runtime receives its own dedicated microVM"). So setting `session.id` on the `Resource` at first-invoke time is correct for the whole process — no SpanProcessor or contextvar plumbing needed. Honeycomb flattens resource attrs to direct columns, so `WHERE session.id = X` queries just work.
+
+`agent/observability.py::configure_tracing` takes an optional `session_id` and stamps it on the Resource. The local non-AgentCore path (`agent/inbound.py`) calls it without a session_id and emits no `session.id` column — fine, since there's no upstream session to join to.
+
+A wrapping span `agent.invocation` was added in `invoke()` so each AgentCore call has a clean root we own; the explicit per-span `set_attribute("session.id", …)` was removed once the Resource approach landed (redundant).
+
+Caveat: this is semconv-pragmatic, not semconv-pure. `session.id` is defined as a span/event attribute in OTel. Putting it on Resource leans on the AgentCore microVM-per-session guarantee — if we ever ran the agent server in a process that handled multiple sessions concurrently, the column would silently lie. Not a real risk for this codebase, but worth noting for skill writeups.
