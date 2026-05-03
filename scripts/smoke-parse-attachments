@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Exercise parse_inbound's attachment-extraction path end-to-end without
+# running the LLM loop. Stages a synthetic inbound with one HEIC + one
+# JPEG attachment to S3, then calls parse_inbound_impl directly and
+# verifies:
+#   - the returned attachments list has both entries
+#   - files were written into <workspace>/images/
+#   - the HEIC was converted to JPG (size on disk > 0, content_type
+#     image/jpeg)
+# Does NOT commit or push.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source .env
+
+echo "=== Ensuring workspace is synced ==="
+uv run python -c "from agent.tools.site_tools import sync_workspace_impl; print(sync_workspace_impl())"
+echo
+
+echo "=== Staging picture inbound in S3 ==="
+KEY=$(uv run python scripts/_stage_picture_inbound.py)
+echo "staged: s3://cyndibot-incoming-emails/${KEY}"
+echo
+
+echo "=== Calling parse_inbound directly ==="
+uv run python scripts/_check_parse_attachments.py "${KEY}"
