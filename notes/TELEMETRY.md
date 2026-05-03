@@ -43,19 +43,14 @@ Per https://aws.amazon.com/ses/pricing/ — both directions are $0.0001/message.
 
 Constants live in `agent/tools/email_tools.py` (`SES_SEND_PRICE_USD`, `SES_RECEIPT_PRICE_USD`). Verified locally — Phoenix trace `12299e69d2997939859c149b9ba46ac1` (`scripts/agent-fake-roundtrip` run 2026-05-03) carries all four attributes on the right two spans.
 
-### Next: SES inbound chunk charge (becomes load-bearing once Mom sends pictures)
+### Done: SES inbound chunk charge ✅
 
-SES bills $0.00009 per 256KB chunk of incoming mail on top of the per-message charge. For plain-text emails (~5KB) the chunk charge is ~10% of inbound; for a 1MB photo it's ~half of inbound and dominates.
+SES bills $0.00009 per 256KB chunk of incoming mail on top of the per-message charge. For plain-text emails (~5KB) it's ~10% of inbound; for a 1MB photo it's ~half. Constants live with the per-message ones in `agent/tools/email_tools.py` (`SES_RECEIPT_CHUNK_PRICE_USD`, `SES_RECEIPT_CHUNK_BYTES`).
 
-`parse_inbound_impl` already has `raw` bytes in scope. Add:
-
-```python
-chunks = max(1, math.ceil(len(raw) / (256 * 1024)))
-span.set_attribute("cost.ses.receipt_chunks.qty", chunks)
-span.set_attribute("cost.ses.receipt_chunks.price", 0.00009)
-```
-
-Verify with a fake inbound large enough to need >1 chunk.
+| Span | Attribute | Value |
+| --- | --- | --- |
+| `execute_tool parse_inbound` | `cost.ses.receipt_chunks.qty` | `ceil(len(raw) / 262144)`, min 1 |
+| `execute_tool parse_inbound` | `cost.ses.receipt_chunks.price` | 0.00009 |
 
 ### Next: attachment visibility (lands with the picture feature)
 

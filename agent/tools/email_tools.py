@@ -1,4 +1,5 @@
 import email
+import math
 import re
 import time
 from email import policy
@@ -24,6 +25,8 @@ REPLY_FROM = "Cyndibot <bot@cyndibot.jessitron.honeydemo.io>"
 # https://aws.amazon.com/ses/pricing/ — marginal rate after free tier.
 SES_SEND_PRICE_USD = 0.0001
 SES_RECEIPT_PRICE_USD = 0.0001
+SES_RECEIPT_CHUNK_PRICE_USD = 0.00009  # per 256KB chunk of incoming mail
+SES_RECEIPT_CHUNK_BYTES = 256 * 1024
 
 _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
 
@@ -113,9 +116,12 @@ def parse_inbound_impl(s3_key: str) -> dict[str, Any]:
         heic_total_ms += heic_ms
         bytes_total += meta["size_bytes"]
 
+    chunks = max(1, math.ceil(len(raw) / SES_RECEIPT_CHUNK_BYTES))
     span = trace.get_current_span()
     span.set_attribute("cost.ses.receipt.qty", 1)
     span.set_attribute("cost.ses.receipt.price", SES_RECEIPT_PRICE_USD)
+    span.set_attribute("cost.ses.receipt_chunks.qty", chunks)
+    span.set_attribute("cost.ses.receipt_chunks.price", SES_RECEIPT_CHUNK_PRICE_USD)
     span.set_attribute("email.attachment.count", len(attachments))
     if attachments:
         span.set_attribute("email.attachment.bytes_total", bytes_total)
