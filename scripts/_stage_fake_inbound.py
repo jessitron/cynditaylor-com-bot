@@ -32,15 +32,17 @@ def build_message(subject: str, body: str) -> bytes:
 
 
 def main() -> None:
-    subject = "Home page tweak please"
+    subject = "Add a line to the test page"
     body = (
         "Hi Cyndibot,\n"
         "\n"
-        "On my home page, please change the big hero text "
-        "\"Capturing a Moment in Time\" to \"A Moment Captured Forever\".\n"
+        "Please append a one-line dated entry to tests.html (create it\n"
+        "if it doesn't exist yet -- it's just a scratch page for dev-loop\n"
+        "smokes, not linked from the nav). The entry should say\n"
+        "\"agent-fake-roundtrip ran\" with today's date.\n"
         "\n"
         "Thanks!\n"
-        "Cyndi\n"
+        "Cyndi (smoketest fake-roundtrip)\n"
     )
 
     key = f"{PREFIX}fake-{secrets.token_urlsafe(16)}"
