@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# First end-to-end smoke for an agent-initiated push to live main.
+#
+#   1. Stage a fake inbound asking for a tiny README addition.
+#   2. Run the agent on that S3 key (parse -> sync -> read -> write ->
+#      commit -> push -> reply).
+#   3. Print the Phoenix trace URL.
+#   4. Print the resulting commit on live main so we can click through.
+#
+# Pushes to the LIVE cynditaylor-com main branch. Re-running creates a
+# new commit each time. Easy to revert via `git revert` on cynditaylor-com.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source .env
+
+echo "=== Staging README-smoke inbound in S3 ==="
+KEY=$(uv run python scripts/_stage_readme_smoke.py)
+echo "staged: s3://cyndibot-incoming-emails/${KEY}"
+echo
+
+echo "=== Running agent ==="
+uv run python -m agent.inbound "${KEY}"
+echo
+
+echo "=== Site workspace after run ==="
+scripts/site-status
+echo
+
+echo "=== Latest Phoenix trace ==="
+scripts/check-last-span
