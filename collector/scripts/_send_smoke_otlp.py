@@ -1,8 +1,9 @@
 """Send a synthetic span with a span-event to the collector and assert export succeeded.
 
-Used by collector/scripts/smoke. The intent of the payload is to exercise the
-transform pipeline: a span event with attributes that the collector should
-hoist onto the parent span and then drop the now-empty event.
+Used by collector/scripts/smoke. The payload mimics what Strands instrumentation
+emits: a span event named gen_ai.client.inference.operation.details whose
+attributes the collector should hoist onto the parent span and then drop the
+now-empty event.
 """
 
 import argparse
@@ -34,7 +35,7 @@ def main() -> None:
     marker = secrets.token_hex(8)
     with tracer.start_as_current_span("collector-smoke-test") as span:
         span.add_event(
-            "smoke.test.event",
+            "gen_ai.client.inference.operation.details",
             attributes={
                 "smoke.lifted_attr": "lifted",
                 "smoke.marker": marker,
@@ -65,7 +66,7 @@ def main() -> None:
     print("export succeeded. In Honeycomb (service=collector-smoke), expect:")
     print("  - one span 'collector-smoke-test'")
     print("  - span attrs include smoke.lifted_attr, smoke.marker")
-    print("  - NO separate row with name='smoke.test.event' (filter dropped it)")
+    print("  - NO separate row with name='gen_ai.client.inference.operation.details' (filter dropped it)")
 
 
 if __name__ == "__main__":

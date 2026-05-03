@@ -86,24 +86,27 @@ OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental,gen_ai_tool_definitions
 
 If you already have (or want) an OTel Collector in your pipeline, do the event-to-attribute lift there. The producer then stays standards-compliant (vanilla `gen_ai.*` events on span events, where the OTel spec puts them) and you get the same Honeycomb-queryable columns. Bonus: the collector approach works for any GenAI instrumentation library, not just Strands — there's nothing Strands-specific about it.
 
-OTTL transform that does the lift:
+OTTL transform that does the lift, **gated to the one event Strands uses for messages** so other events (exception events especially) survive the pipeline intact:
 
 ```yaml
 processors:
-  transform/lift_event_attrs:
+  transform/lift_gen_ai_event_attrs:
     trace_statements:
       - context: spanevent
+        conditions:
+          - name == "gen_ai.client.inference.operation.details"
         statements:
           - merge_maps(span.attributes, attributes, "upsert")
-          - keep_keys(attributes, [])
 
-  filter/drop_empty_events:
+  filter/drop_lifted_gen_ai_events:
     traces:
       spanevent:
-        - 'true'
+        - name == "gen_ai.client.inference.operation.details"
 ```
 
-`spanevent` context runs once per span event. `span.attributes` is the parent span's attrs (writable from this context); `merge_maps(target, source, "upsert")` copies the event's attrs onto the parent span. The `filter` then drops every span event (now redundant). Wire both into a `traces` pipeline and the gen_ai message arrays land as columns on the parent span.
+`spanevent` context runs once per span event. The `conditions` block restricts both processors to the one event Strands packs `gen_ai.input.messages` / `gen_ai.output.messages` into. Inside the matching event, `span.attributes` is the parent span's attrs (writable from this context); `merge_maps(target, source, "upsert")` copies the event's attrs onto the parent span. The `filter` then drops just that event (now redundant on the parent span). Wire both into a `traces` pipeline and the gen_ai message arrays land as columns on the parent span — while exception events and any other future events pass through untouched.
+
+**Don't gate-globally** (`spanevent: ['true']`) unless you're certain every event in your pipeline is noise. Strands and most SDKs use span events for exceptions (per OTel exception semconv), and an unconditional drop loses the "this span had an exception" trace-waterfall marker. The exception attrs (`exception.type`, `exception.message`, `exception.stacktrace`) get merged onto the span, but the event row itself is gone.
 
 **Tradeoff:** producer-side (`LANGFUSE_BASE_URL`) is zero infrastructure but Strands-specific and depends on a substring heuristic that could change. Collector-side requires running a collector but is portable, doesn't relyon Strands internals, and gives you a place to do other ingest hygiene (PII redaction, attribute renaming, sampling, provenance stamping).
 
