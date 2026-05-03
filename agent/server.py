@@ -1,4 +1,6 @@
 from bedrock_agentcore import BedrockAgentCoreApp
+from bedrock_agentcore.runtime.context import RequestContext
+from opentelemetry import trace
 
 from agent.cyndibot import build_agent
 from agent.observability import configure_tracing
@@ -17,10 +19,14 @@ def _get_agent():
 
 
 @app.entrypoint
-def invoke(payload):
+def invoke(payload, context: RequestContext):
     s3_key = payload["s3_key"]
     agent = _get_agent()
-    result = agent(f"The inbound email is at S3 key: {s3_key}")
+    tracer = trace.get_tracer("agent.server")
+    with tracer.start_as_current_span("agent.invocation") as span:
+        if context.session_id:
+            span.set_attribute("session.id", context.session_id)
+        result = agent(f"The inbound email is at S3 key: {s3_key}")
     return {"result": str(result.message)}
 
 
