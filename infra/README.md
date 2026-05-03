@@ -266,6 +266,24 @@ State-changing AWS resources owned by this module:
 - **Sender allowlist:** hard-coded set of four real addresses (`jessitron@jessitron.com`, `jessitron@gmail.com`, `mamacatitron@gmail.com`, `taylor777@sbcglobal.net`) plus any address `@cyndibot.jessitron.honeydemo.io` (we control this domain via SES + DKIM, so self-loop test fixtures pass without polluting the production list). Senders outside both rules → log + no-op return `{"status":"skipped","reason":"sender_not_allowed"}`, never reach AgentCore. Verified by `scripts/smoke-deny`, which `aws lambda invoke`s the dispatcher with a synthesized SES event from `stranger@example.com`.
 - **Vendored boto3:** ~15 MB zip. If/when Lambda's bundled boto3 catches up to bedrock-agentcore, we can drop the vendored copy and use a pure handler.
 
+## 2026-05-03 — Dispatcher Lambda emits one Honeycomb event per email
+
+Added two env vars to `cyndibot-invoke-agent` so the handler can POST a single event per invocation (every code path: noop / skipped / invoked / errored) to Honeycomb's Events API. Source-of-truth for "how many emails got rejected and why" without grepping CloudWatch.
+
+- `HONEYCOMB_API_KEY` — same ingest key used by AgentCore for traces; sourced from project-root `.env` at deploy time, baked into Lambda env. `lambda/invoke_agent/scripts/deploy` now sources `.env` and refuses to deploy if the key is missing.
+- `HONEYCOMB_DATASET` — `cyndibot-dispatcher` (default in `lambda/invoke_agent/config.env`). Separate from the AgentCore trace dataset (`cynditaylor-com-bot`) so dispatcher rows don't mingle with span schema.
+
+State change reproduces via:
+
+```bash
+lambda/invoke_agent/scripts/build
+lambda/invoke_agent/scripts/deploy
+```
+
+Both `smoke` and `smoke-deny` now call `scripts/_verify_honeycomb_event.py`, which polls CloudWatch for the `honeycomb event sent: event_id=<id> outcome=<outcome>` log line and asserts the outcome matches the expected one. PASS prints the event_id so it can be looked up directly in Honeycomb.
+
+Field naming: dispatcher-specific fields use `dispatcher.*` (e.g. `dispatcher.outcome`, `dispatcher.agent_invoked`), email-shape fields use `email.*` (e.g. `email.from`, `email.message_id`), and OTel-standard names are used where they exist (`session.id`, `aws.s3.key`, `faas.invocation_id`, `faas.name`) so future agent-side instrumentation can stamp the same column names.
+
 ## OTel collector Lambda — see `collector/`
 
 Self-contained module. Owns its own ECR repo, IAM role, Lambda, and Function URL. State-changing commands (ECR repo, IAM role, Lambda CRUD) are driven by scripts in `collector/scripts/`. Run order on first deploy:

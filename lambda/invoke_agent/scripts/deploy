@@ -6,6 +6,14 @@ cd "$(dirname "$0")/.."
 
 # shellcheck disable=SC1091
 source ./config.env
+# Pull HONEYCOMB_API_KEY from the project-root .env (gitignored).
+# shellcheck disable=SC1091
+source ../../.env
+
+if [[ -z "${HONEYCOMB_API_KEY:-}" ]]; then
+  echo "HONEYCOMB_API_KEY not set — populate .env at the repo root before deploying" >&2
+  exit 1
+fi
 
 ZIP_PATH=build/${LAMBDA_NAME}.zip
 
@@ -18,12 +26,14 @@ ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 ROLE_ARN="arn:aws:iam::${ACCOUNT}:role/${LAMBDA_ROLE_NAME}"
 
 ENV_VARS=$(python3 - <<PY
-import json, os
+import json
 print(json.dumps({"Variables": {
   "CYNDIBOT_AGENT_RUNTIME_ARN": "${AGENT_RUNTIME_ARN}",
   "CYNDIBOT_INBOUND_PREFIX":    "${INBOUND_PREFIX}",
   "CYNDIBOT_AGENT_USERNAME":    "${AGENT_USERNAME}",
   "CYNDIBOT_AGENT_DOMAIN":      "${AGENT_DOMAIN}",
+  "HONEYCOMB_API_KEY":          "${HONEYCOMB_API_KEY}",
+  "HONEYCOMB_DATASET":          "${HONEYCOMB_DATASET}",
 }}))
 PY
 )

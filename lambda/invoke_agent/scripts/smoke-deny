@@ -16,6 +16,8 @@ source ./config.env
 
 DENY_SENDER="${DENY_SENDER:-stranger@example.com}"
 RECIPIENT="${AGENT_USERNAME}@${AGENT_DOMAIN}"
+LOG_GROUP="/aws/lambda/${LAMBDA_NAME}"
+START_MS=$(python3 -c "import time; print(int(time.time()*1000))")
 
 if command -v uv >/dev/null 2>&1; then
   PY="uv run python"
@@ -68,3 +70,9 @@ else
   echo "FAIL: expected status=skipped reason=sender_not_allowed sender=${DENY_SENDER}" >&2
   exit 1
 fi
+
+echo
+echo "=== Verifying Honeycomb dispatcher event ==="
+${PY} scripts/_verify_honeycomb_event.py \
+  "${LOG_GROUP}" "${AWS_REGION}" "${START_MS}" "skipped_sender_not_allowed"
+echo "(dataset: ${HONEYCOMB_DATASET}, env: cynditaylor-com-bot, team: modernity)"

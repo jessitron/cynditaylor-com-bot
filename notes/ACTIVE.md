@@ -124,6 +124,8 @@ Tracked separately in `notes/TELEMETRY.md` — Honeycomb-friendly tracing is don
 
 Not yet covered: a smoke that exercises one of the four explicit allowlist entries with a real external sender. Plan for next session: send a real email from `jessitron@jessitron.com` (already verified for SES outbound, so the agent's reply will deliver back) and watch the lambda log + S3 reply.
 
+**One Honeycomb event per email (added 2026-05-03):** dispatcher now POSTs a single event per invocation to dataset `cyndibot-dispatcher` (env `cynditaylor-com-bot`, team `modernity`) covering every code path — noop / skipped_recipient_filter / skipped_sender_not_allowed / missing_message_id / agent_invoke_failed / invoked. Sent synchronously via the Events API in a `finally` block; failures log a warning but never raise (a raise would trigger SES's async retry, double-invoking AgentCore on success). Field naming uses `dispatcher.*`, `email.*`, and OTel-standard `session.id` / `aws.s3.key` / `faas.invocation_id` / `faas.name` to keep room for the agent's spans to stamp the same column names later. Verified via `smoke-deny`: event_id round-trips from the Lambda log into Honeycomb. See `notes/TELEMETRY.md` "TODO: stamp `session.id` on every agent span" for the next slice that completes the cross-dataset join.
+
 **SES verification status (as of 2026-05-03):**
 - Verified for outbound replies: `cyndibot.jessitron.honeydemo.io` (domain), `jessitron@jessitron.com`.
 - Verification email sent, awaiting click: `taylor777@sbcglobal.net` (mom).

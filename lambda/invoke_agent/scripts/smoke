@@ -148,6 +148,11 @@ else
 fi
 echo
 
-echo "=== Honeycomb ==="
+echo "=== Verifying Honeycomb dispatcher event ==="
+${PY} scripts/_verify_honeycomb_event.py \
+  "${LOG_GROUP}" "${AWS_REGION}" "${START_MS}" "invoked"
+echo "(dataset: ${HONEYCOMB_DATASET}, env: cynditaylor-com-bot, team: modernity)"
+echo
+echo "=== Agent trace ==="
 echo "team modernity, env cynditaylor-com-bot, dataset cynditaylor-com-bot"
 echo "filter recent traces by attribute 'session.id' = ${SESSION_ID}"
