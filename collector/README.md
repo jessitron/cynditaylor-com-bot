@@ -1,31 +1,39 @@
 # OTel Collector as a Lambda — "Boswell"
 
-Self-contained module: an OpenTelemetry Collector packaged as a container-image AWS Lambda, fronted by a Function URL. Use it when you need OTTL post-processing on a low-traffic OTel data path but don't want to run persistent compute.
+A single-purpose AWS Lambda that sits between this project's AgentCore runtime (Strands agent) and Honeycomb, post-processing OpenTelemetry traces in flight. The collector is named **Boswell** — Samuel Johnson's biographer, who recorded everything one specific person said. He stamps every span he processes with `collector.boswell.*` provenance attributes so we can tell, after the fact, exactly which spans went through him and which build did the processing.
 
-The collector is named **Boswell** in this project — Samuel Johnson's biographer, who recorded everything one specific person said. It stamps every span it processes with `collector.boswell.*` provenance attributes (see "Provenance" below). When reusing this module, rename via `COLLECTOR_NAME` in `config.env`.
+Self-contained module: `cp -r collector/ ../other-project/`, edit `config.env` to rename, edit `config.yaml` to swap processors. When reusing, rename Boswell to whatever you want via `COLLECTOR_NAME` in `config.env`.
+
+## What it's for and why Lambda
+
+Two motivations stacked on top of each other.
+
+**The processing we want.** Strands' GenAI instrumentation puts `gen_ai.{input,output}.messages` on both span attributes AND span events. The events show up in Honeycomb as duration-zero noise rows. We want to lift any event-only data onto the parent span and drop the events. A producer-side Python `SpanProcessor` can't do this — `ReadableSpan` is read-only at `on_end` time. The collector's `transform` (OTTL) processor can, in one line. See `notes/TELEMETRY.md` for the full rationale.
+
+**Why not a persistent collector.** Mom-volume traffic — a few emails per day. A Fargate task at 0.25 vCPU / 0.5 GB is ~$9/mo and idles ~99.9% of the time. Lambda Function URL with a container image, fronted by Lambda Web Adapter, gives us the same OTLP/HTTP receiver shape and costs effectively zero at this volume. Cold start (~4 s) is invisible because the producer (AgentCore) exports asynchronously via `BatchSpanProcessor` and doesn't block on it.
+
+The shape doesn't fit if you're sustained > ~1 req/sec, need cross-invocation queuing for retry-through-outages, or want tail sampling that needs all spans of a trace at once. For those, see the persistent-collector alternative in `notes/skills/otel-collector-on-lambda/SKILL.md`.
 
 Built around `otel/opentelemetry-collector-contrib` + [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter), which lets the collector's OTLP/HTTP receiver respond to Function URL invocations.
-
-## Why this exists in this project
-
-Strands' GenAI instrumentation puts `gen_ai.{input,output}.messages` on both span attributes and span events. The events show up in Honeycomb as duration-zero noise rows. We want to lift any event-only data onto the parent span and drop the events. A Python `SpanProcessor` can't mutate `ReadableSpan`; the collector's `transform` (OTTL) processor can. See `notes/TELEMETRY.md` for the full rationale.
 
 ## Architecture
 
 ```
 AgentCore (Strands)
-   │  OTLP/HTTP/protobuf, bearer token
+   │  OTLP/HTTP/protobuf, bearer token, X-Amzn-Trace-Id from Lambda runtime
    ▼
-Lambda Function URL
+Lambda Function URL  (auth_type=NONE — bearer enforced inside the collector)
    │
-Lambda container image
-   ├─ Lambda Web Adapter (extension) → polls Runtime API, forwards HTTP to localhost:4318
-   └─ otelcol-contrib
-        ├─ otlp receiver (bearertokenauth)
+Lambda container image (Alpine + staged otelcol-contrib binary)
+   ├─ Lambda Web Adapter (extension)
+   │    polls Runtime API, forwards HTTP request to localhost:4318
+   └─ otelcol-contrib (CMD, no ENTRYPOINT — gotcha #2)
+        ├─ otlp receiver (bearertokenauth, include_metadata: true)
         ├─ transform: lift span-event attrs onto parent span
-        ├─ filter: drop the now-empty span events
-        ├─ batch
-        └─ otlphttp/honeycomb → api.honeycomb.io
+        ├─ filter:    drop the now-empty span events
+        ├─ attributes: stamp collector.boswell.* provenance
+        └─ otlphttp/honeycomb (sending_queue: disabled — Lambda freezes)
+             → api.honeycomb.io
 ```
 
 ## Files
@@ -44,6 +52,14 @@ Lambda container image
 | `scripts/deploy` | Create-or-update the Lambda + Function URL. Idempotent. |
 | `scripts/smoke` | Send a test span via OTLP/HTTP, assert export succeeded. |
 | `scripts/delete` | Tear down Lambda + Function URL. Leaves ECR + IAM. |
+| `scripts/redeploy` | Build → validate → push → deploy → smoke, in sequence. |
+| `scripts/run-local` | Run the container locally for debugging, no LWA. |
+| `scripts/logs` | Tail recent CloudWatch logs (`/aws/lambda/${COLLECTOR_NAME}`). |
+| `scripts/dump-recent-logs` | Same logs, raw, one entry per line — handy when CW's CLI fragments tab-separated REPORT lines. |
+| `scripts/count-logs` | Two-smoke window + classifier — answers "how much CloudWatch volume per invocation?". |
+| `scripts/probe`, `probe-body` | curl variants against the Function URL. Distinguishes 401/403/400 to localize misconfig. |
+| `scripts/diag-403`, `test-iam-auth` | One-shot diagnostics from when we were chasing the dual-permission gotcha. Kept around in case it recurs. |
+| `scripts/inspect-image` | Architecture + binary type for the local image. |
 
 ## Deploy
 

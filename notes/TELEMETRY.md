@@ -22,22 +22,18 @@ Strands' OTel telemetry now lands in Honeycomb as queryable individual columns (
 
 The full setup (with traps and verification queries) is captured as a Claude Code skill at `notes/skills/strands-honeycomb-tracing/SKILL.md` so other agents can replicate it.
 
-## Next slice: drop the redundant span events — via OTel collector as Lambda
+## Done: drop the redundant span events — Boswell ✅
 
-Currently each LLM-call span in Honeycomb has both:
-- the JSON-encoded `gen_ai.{input,output}.messages` attrs on the span (good, queryable)
-- the `gen_ai.client.inference.operation.details` span events that carry the same payload (redundant — they show up in Honeycomb as separate rows with `name=gen_ai.client.inference.operation.details, duration_ms=0`)
+Built `collector/` (a.k.a. **Boswell**), an OTel collector as a Lambda container fronted by a Function URL. Producer points its OTLP exporter at the URL; the collector lifts span-event attrs onto the parent span (OTTL `transform` with `merge_maps`), drops the now-empty events (`filter` with `'true'`), stamps three provenance attributes (`collector.boswell.*`), and forwards to Honeycomb synchronously (no batch, no sending queue — Lambda freezes between invocations).
 
-Producer-side options were both unsatisfying:
+**Current state (2026-05-03):**
+- Boswell deployed at `https://45exz5ki5veyvldhaojdynf3ty0pqnno.lambda-url.us-west-2.on.aws/`. Bearer token in `collector/.env` (gitignored).
+- AgentCore is **NOT yet pointed at it.** `scripts/_build_agentcore_env_json.py` still ships traces direct to Honeycomb. To flip: replace `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` with the function URL + `/v1/traces` and the Honeycomb team header with `authorization=Bearer <token>`. See `collector/README.md` § "Wiring this project's AgentCore runtime".
+- Orphan resources from the rename: ECR repo `cyndibot-collector` and IAM role `CyndibotCollectorLambda` still exist (free, but worth deleting eventually).
+- Skills written: `notes/skills/otel-collector-on-lambda/SKILL.md` (the deployment shape, six gotchas paid in blood) and `notes/skills/collector-pipeline-provenance/SKILL.md` (the three-attribute pattern).
 
-1. **`SpanProcessor.on_end`:** can't mutate. `ReadableSpan` is read-only by design. Reaching into `span._events` / `span._attributes` works but pins us to private SDK internals.
-2. **Wrapping `OTLPSpanExporter.export`:** doable but brittle — every SDK upgrade is a chance for the wrap to drift.
-
-The collector's `transform` processor (OTTL) was built for exactly this. `merge_maps(span.attributes, attributes, "upsert")` in the `spanevent` context lifts every event attr onto the parent span; the `filter` processor then drops the now-empty events so Honeycomb doesn't show duration-zero noise.
-
-To avoid running a persistent collector for mom-volume traffic, we ship the collector **as a Lambda container** (`collector/` module). AgentCore's OTel exporter points at a Function URL; the Lambda transforms and forwards to Honeycomb. Cold start (~1–2 s) is invisible to mom because export is async on AgentCore's side.
-
-Module is intentionally self-contained so it can be `cp -r`'d to other projects. Auth is bearer token in a header (Function URL is `auth_type=NONE`; we accept the security tradeoff in exchange for not having to write a Sigv4-signing OTel exporter on the AgentCore side).
+**Producer-side decisions still live:**
+- `LANGFUSE_BASE_URL=langfuse-stub-for-honeycomb` — keeps Strands writing JSON message arrays as span attributes alongside the events. The collector cleanup makes the events redundant; we *could* unset this once Boswell is wired in, but the duplication is harmless and removing the env var is a separate cleanup.
 
 Reference points if we ever revisit producer-side instead:
 - `strands/telemetry/tracer.py:241` (`_add_event`) — the `to_span_attributes` knob.

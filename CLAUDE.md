@@ -50,3 +50,13 @@ Tracked as a separate line of work in **`notes/TELEMETRY.md`** — current shape
 
 - **After any test run that emits traces, report the trace URL** so Jessitron can click through. Locally: `scripts/check-last-span` / `scripts/check-last-trace` print URLs of the form `http://localhost:6006/projects/{projectId}/traces/{traceId}`. For cloud runs, surface the Honeycomb trace ID from the AgentCore invoke output.
 - Phoenix runs locally (`http://localhost:6006/v1/traces`, started by `./run`); Honeycomb is the cloud target (team `modernity`, env `cynditaylor-com-bot`). All OTel env vars live in the gitignored `.env`.
+
+There's also `collector/` — an OTel collector deployed as a Lambda ("Boswell") that post-processes traces between AgentCore and Honeycomb. See `collector/README.md`.
+
+## Skills in this repo
+
+Self-contained skill docs in `notes/skills/`. Read the matching one before doing similar work in this or another project:
+
+- `strands-honeycomb-tracing` — Strands Agent OTel setup that lands queryable columns in Honeycomb's AI view.
+- `otel-collector-on-lambda` — packaging the OTel Collector as a Lambda container image. Six gotchas paid in blood.
+- `collector-pipeline-provenance` — three-attribute pattern (`collector.<name>`, `.version`, `.invocation_id`) for stamping spans with which collector processed them.
