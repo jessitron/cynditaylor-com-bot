@@ -105,6 +105,20 @@ Done:
 - A real "edit a file" cloud smoke test. Greeting payload validates the path; first edit-and-commit invoke will be the next slice.
 - SES production access request — still in sandbox, so cyndibot can only reply to verified addresses.
 
+## Slice: `GITHUB_TOKEN` in Secrets Manager (cloud half) ✅ (2026-05-03)
+
+Goal: deployed AgentCore can push without baking the token into environmentVariables (which `get-agent-runtime` returns in plaintext).
+
+1. Secret `cyndibot/github-token` in Secrets Manager (us-west-2). ARN: `arn:aws:secretsmanager:us-west-2:414852377253:secret:cyndibot/github-token-hdaGjb`. `scripts/secret-create-github-token` is the idempotent wrapper (sources `.env` so token never hits shell history; `put-secret-value` if already created).
+2. IAM: added `GithubTokenSecret` statement to `cyndibot-agent-runtime-policy.json` granting `secretsmanager:GetSecretValue` on `cyndibot/github-token-*` (the wildcard matches Secrets Manager's random suffix). Applied via the existing `put-role-policy` command in infra/README.md.
+3. Container entrypoint extended: if `GITHUB_TOKEN` is unset and `GITHUB_TOKEN_SECRET_ARN` is set, fetch via `python -m agent._fetch_secret` (boto3 only — no awscli baked into image), then proceed with the same git-credential-helper config as before. Locally `.env` provides the token directly so the fetch path is skipped.
+4. `_build_agentcore_env_json.py` now requires `GITHUB_TOKEN_SECRET_ARN` and emits it in environmentVariables. The token itself stays out of the runtime config.
+5. **Verifying without a real-edit smoke:**
+   - Local: `scripts/container-run-local --from-secret` strips `GITHUB_TOKEN` from the env file before docker run, so the entrypoint exercises boto3 against the real Secrets Manager (using mounted `~/.aws` creds). `scripts/container-smoke-push` then pushes to a throwaway branch — green.
+   - Cloud: greeting `agentcore-smoke-invoke` after `agentcore-update` returns 200. Because entrypoint runs `set -euo pipefail`, any IAM/fetch failure would prevent the runtime reaching READY, so a healthy boot is sufficient evidence the fetch worked.
+
+A real cloud-side push smoke is still pending — needs `push_site_changes` wired into `agent/inbound.py`.
+
 ## Slice: Container `git push` via `GITHUB_TOKEN` ✅ (2026-05-03)
 
 Goal: push from inside the container without depending on the host's macOS keychain. Generalizes to AgentCore: same `GITHUB_TOKEN` env var, sourced from Secrets Manager later instead of `.env`.
@@ -148,8 +162,8 @@ Not yet covered: a smoke that exercises one of the four explicit allowlist entri
 
 ## Still pending
 
-- `GITHUB_TOKEN` in Secrets Manager so the deployed AgentCore runtime can push. Local container path is done (see slice above); cloud just needs the secret + IAM + a small bootstrap to load it into the env before the entrypoint runs.
-- Real "edit a file" cloud smoke test (greeting payload only validated the parse+reply path; the lambda smoke is also greeting-style).
+- Wire `push_site_changes` into `agent/inbound.py` (tool list + prompt). Plan was to watch one manual main-push go through first.
+- Real "edit a file" cloud smoke test (greeting payload only validated the parse+reply path; the lambda smoke is also greeting-style). Will exercise the Secrets Manager fetch through to an actual `git push` in the cloud.
 - SES production access request so mom can actually send email to the bot.
 - **Unreplyable-recipient error visibility.** When the agent tries to `send_reply` to an address SES can't deliver to (sandbox: unverified identity; prod: hard bounce), the current tool returns `success` as long as the SES API call returns a Message-ID — silent failure from the agent's POV. Test by sending an inbound from an unverified address, then verify we surface the failure somewhere actionable (SES bounce SNS topic? agent-side preflight check against verified identities? a "delivery failed" reply to a fallback address?). Discovered when the first real-mom-style email landed in Gmail spam — different failure mode but same observability gap.
 

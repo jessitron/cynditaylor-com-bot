@@ -86,6 +86,12 @@
       "Resource": [
         "arn:aws:ses:us-west-2:414852377253:identity/cyndibot.jessitron.honeydemo.io"
       ]
+    },
+    {
+      "Sid": "GithubTokenSecret",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:us-west-2:414852377253:secret:cyndibot/github-token-*"
     }
   ]
 }

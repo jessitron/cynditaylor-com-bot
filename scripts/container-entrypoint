@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# If GITHUB_TOKEN is present, configure git so `git push https://github.com/...`
-# authenticates as the token owner. AgentCore later will inject this same env
-# var from Secrets Manager; locally it comes from .env via --env-file.
+# In AgentCore, the token lives in Secrets Manager and the runtime gets
+# the secret's ARN as an env var. Fetch and promote it to GITHUB_TOKEN so
+# the rest of this script doesn't need a separate code path.
+if [ -z "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_TOKEN_SECRET_ARN:-}" ]; then
+  GITHUB_TOKEN=$(python -m agent._fetch_secret)
+  export GITHUB_TOKEN
+fi
+
+# If GITHUB_TOKEN is present (from .env locally, or fetched above in cloud),
+# configure git so `git push https://github.com/...` authenticates as the
+# token owner.
 #
 # x-access-token is the username GitHub expects for token-based HTTPS auth;
 # the token itself is the password. credential.helper=store reads from

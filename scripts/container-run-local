@@ -6,6 +6,15 @@ cd "$(dirname "$0")/.."
 VOLUME_NAME="cyndibot-workspace"
 IMAGE="cyndibot:local"
 
+# --from-secret simulates the AgentCore env: GITHUB_TOKEN unset, but
+# GITHUB_TOKEN_SECRET_ARN present so the entrypoint fetches from
+# Secrets Manager. Useful for verifying the fetch path before pushing
+# to ECR. Default mode reads GITHUB_TOKEN from .env directly.
+FROM_SECRET=0
+if [ "${1:-}" = "--from-secret" ]; then
+  FROM_SECRET=1
+fi
+
 if ! docker volume inspect "${VOLUME_NAME}" >/dev/null 2>&1; then
   docker volume create "${VOLUME_NAME}" >/dev/null
   echo "created docker volume ${VOLUME_NAME} (simulates AgentCore /mnt/workspace)"
@@ -21,6 +30,13 @@ grep -v '^[[:space:]]*#' .env \
   | sed -E "s/^([A-Za-z_][A-Za-z0-9_]*)=\"(.*)\"$/\1=\2/" \
   | sed -E "s/^([A-Za-z_][A-Za-z0-9_]*)='(.*)'$/\1=\2/" \
   > "${ENV_FILE}"
+
+if [ "${FROM_SECRET}" = "1" ]; then
+  # Drop GITHUB_TOKEN so the entrypoint falls through to the
+  # Secrets Manager fetch path.
+  sed -i.bak '/^GITHUB_TOKEN=/d' "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
+  echo "(--from-secret: GITHUB_TOKEN suppressed; entrypoint will fetch from Secrets Manager)"
+fi
 
 echo "starting ${IMAGE} on http://localhost:8080"
 echo "  scripts/container-wait-ready       -> poll /ping until Healthy"

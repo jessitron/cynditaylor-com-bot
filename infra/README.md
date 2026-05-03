@@ -315,3 +315,40 @@ aws ecr delete-repository \
 Active replacements: ECR repo `boswell`, IAM role `BoswellCollectorLambda`, Lambda `boswell`.
 
 When state actually gets created, append a dated section here with the same shape as the AgentCore entries above.
+
+## 2026-05-03 — GITHUB_TOKEN moved into Secrets Manager
+
+The local container can already push (token from `.env` → entrypoint configures git credential helper). For the AgentCore runtime to push, the token has to live somewhere the runtime's role can read. Used Secrets Manager rather than baking the token into `environmentVariables`, since `get-agent-runtime` returns env-var values in plaintext.
+
+```bash
+# 1. Create the secret. scripts/secret-create-github-token wraps this and
+#    sources GITHUB_TOKEN from .env so the value never lands in shell history.
+#    Idempotent: put-secret-value if already created.
+aws secretsmanager create-secret \
+  --name cyndibot/github-token \
+  --description "GitHub fine-grained PAT for cyndibot to push to jessitron/cynditaylor-com. Scope: Contents R+W on that one repo." \
+  --secret-string "$GITHUB_TOKEN" \
+  --region us-west-2
+# -> arn:aws:secretsmanager:us-west-2:414852377253:secret:cyndibot/github-token-hdaGjb
+
+# 2. Add secretsmanager:GetSecretValue to the runtime role policy.
+#    Resource uses cyndibot/github-token-* to match the random suffix
+#    Secrets Manager appends to ARNs.
+aws iam put-role-policy \
+  --role-name CyndibotAgentRuntime \
+  --policy-name CyndibotAgentRuntimeInline \
+  --policy-document file://infra/iam/cyndibot-agent-runtime-policy.json
+# (The JSON now has a GithubTokenSecret statement.)
+
+# 3. Pass the ARN to the runtime as an env var. _build_agentcore_env_json.py
+#    now requires GITHUB_TOKEN_SECRET_ARN and includes it in environmentVariables.
+scripts/agentcore-update
+```
+
+The container's entrypoint (`scripts/container-entrypoint`) checks at startup: if `GITHUB_TOKEN` is unset and `GITHUB_TOKEN_SECRET_ARN` is set, it fetches the secret via `python -m agent._fetch_secret` (boto3, no awscli in image) and exports `GITHUB_TOKEN`. The rest of the entrypoint is unchanged. Because `set -euo pipefail`, any IAM/fetch failure crashes the container at startup — visible as a runtime that won't reach READY.
+
+### Verifying without a real edit
+
+Before pushing the new image to ECR, validated the fetch path locally: `scripts/container-run-local --from-secret` strips `GITHUB_TOKEN` from the env file passed to docker, so the entrypoint exercises the boto3 fetch using local AWS creds (`~/.aws` is mounted into the container). `scripts/container-smoke-push` then pushed to a throwaway branch, confirming auth.
+
+Cloud verification was indirect: the post-update greeting smoke (`scripts/agentcore-smoke-invoke`) returned 200. The entrypoint always runs the fetch in the cloud (GITHUB_TOKEN is never set there, GITHUB_TOKEN_SECRET_ARN always is), so a successful boot proves the IAM grant + secret fetch worked. A push-driven smoke will come once `push_site_changes` is wired into the agent.

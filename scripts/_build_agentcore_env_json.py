@@ -16,7 +16,12 @@ import json
 import os
 import sys
 
-REQUIRED = ("BOSWELL_FUNCTION_URL", "INGEST_BEARER_TOKEN", "OTEL_SERVICE_NAME")
+REQUIRED = (
+    "BOSWELL_FUNCTION_URL",
+    "INGEST_BEARER_TOKEN",
+    "OTEL_SERVICE_NAME",
+    "GITHUB_TOKEN_SECRET_ARN",
+)
 
 
 def main() -> None:
@@ -37,6 +42,7 @@ def main() -> None:
         "AWS_REGION": "us-west-2",
         "AWS_DEFAULT_REGION": "us-west-2",
         "CYNDIBOT_WORKSPACE": "/mnt/workspace/cynditaylor-com",
+        "GITHUB_TOKEN_SECRET_ARN": os.environ["GITHUB_TOKEN_SECRET_ARN"],
     }
 
     json.dump(env_vars, sys.stdout)
