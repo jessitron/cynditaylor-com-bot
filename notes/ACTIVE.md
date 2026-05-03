@@ -160,6 +160,27 @@ Not yet covered: a smoke that exercises one of the four explicit allowlist entri
 - Verification email sent, awaiting click: `taylor777@sbcglobal.net` (mom).
 - Not yet requested: `jessitron@gmail.com`, `mamacatitron@gmail.com`. Send via `scripts/ses-verify-email <addr>` whenever wanted; recipient must click the link in the verification mail.
 
+## Slice: picture attachments (next)
+
+Goal: mom attaches a photo, asks to put it on the site, agent does it.
+
+Plan:
+1. `parse_inbound` extracts every `image/*` MIME part. For HEIC parts, converts to JPG via pillow + pillow-heif and drops the original. For other formats (jpeg/png/gif), keeps as-is. Writes into `<workspace>/images/<sanitized-original-filename>` using `part.get_filename()`. On collision, suffix `-2`, `-3`. Returns `attachments: [{path, content_type, size_bytes, original_filename}]` alongside existing fields.
+2. **Sync ordering flips:** prompt does `sync_workspace` BEFORE `parse_inbound` — otherwise the post-parse `git reset --hard` wipes the just-written images.
+3. New `delete_site_file` tool — `commit_site_changes` does `git add -A`, so the agent needs an explicit way to drop unwanted attachments before commit.
+4. System prompt extended: when `attachments` is non-empty, agent reviews, deletes unwanted ones via `delete_site_file`, references the kept ones in HTML (probably `gallery.html`).
+5. Container deps: `pillow` + `pillow-heif` in `pyproject.toml`; `apt-get install -y libheif1` in the Dockerfile.
+6. Telemetry attrs already drafted in `notes/TELEMETRY.md` ("Next: attachment visibility").
+
+**Decisions locked in:**
+- Use the attachment's own filename (sanitized) — matches what mom typed/saw.
+- HEIC → JPG only; do not commit the original HEIC. Other formats kept as-is.
+- Vision pass deferred to a later iteration (see below).
+
+### Later iteration: vision pass
+
+Once v1 is in, pass image bytes back to the model as multimodal content blocks so Sonnet can actually look at the photos. Wins: meaningful alt text, layout decisions (portrait vs. landscape for `gallery.html`), catching sideways photos. Cost: ~1.5K input tokens per phone-photo per Bedrock turn. Mechanism TBD — likely have `parse_inbound`'s tool result include `ImageContent` blocks alongside the JSON metadata, so the agent sees them on the next turn without an extra round trip; verify Strands surfaces multimodal tool results to Bedrock the way we think before committing. Fallback: a small `view_site_image(path)` tool that returns image content on demand.
+
 ## Still pending
 
 - Real "edit a file" cloud smoke test (greeting payload only validated the parse+reply path; the lambda smoke is also greeting-style). Will exercise the Secrets Manager fetch through to an actual `git push` in the cloud.

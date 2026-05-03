@@ -57,6 +57,19 @@ span.set_attribute("cost.ses.receipt_chunks.price", 0.00009)
 
 Verify with a fake inbound large enough to need >1 chunk.
 
+### Next: attachment visibility (lands with the picture feature)
+
+Non-cost observability that goes on the same `execute_tool parse_inbound` span as the chunk charge. Once `parse_inbound` extracts image attachments and writes them into `images/`:
+
+- `email.attachment.count` — total `image/*` MIME parts on the inbound
+- `email.attachment.bytes_total` — sum of decoded sizes
+- `email.attachment.types` — comma-joined content-types (e.g. `image/heic,image/jpeg`)
+- `email.attachment.heic_conversion_ms` — wall time in HEIC→JPG (omit if zero)
+
+Per-attachment detail goes on span events keyed by filename, not as parent-span columns — keeps the column set bounded when mom sends 12 photos at once.
+
+Mirror `email.attachment.count` and `email.attachment.bytes_total` onto the dispatcher's per-email Honeycomb event in dataset `cyndibot-dispatcher` so a single Honeycomb query can `WHERE email.attachment.count > 0` across both datasets and find every picture-bearing run.
+
 ### Next: Bedrock tokens
 
 Token counts are already on `chat` spans as `gen_ai.usage.input_tokens` / `output_tokens`, and the model is on `gen_ai.request.model`. Need a model→price table:
