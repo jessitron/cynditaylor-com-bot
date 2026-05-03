@@ -15,25 +15,27 @@ receivers:
           authenticator: bearertokenauth/ingest
 
 processors:
-  # Lift every span-event attribute onto the parent span (last-write-wins on collision),
-  # then strip the event of its attributes. The producer SDK can't do this:
-  # SpanProcessor.on_end gets a ReadableSpan whose events are immutable.
-  transform/lift_event_attrs:
+  # Lift the gen_ai input/output message attributes that Strands instrumentation
+  # records as span events onto the parent span (last-write-wins on collision).
+  # The producer SDK can't do this: SpanProcessor.on_end gets a ReadableSpan
+  # whose events are immutable. Other events (e.g. exception events) pass
+  # through untouched and reach Honeycomb as event rows.
+  transform/lift_gen_ai_event_attrs:
     error_mode: ignore
     trace_statements:
       - context: spanevent
+        conditions:
+          - name == "gen_ai.client.inference.operation.details"
         statements:
           - merge_maps(span.attributes, attributes, "upsert")
-          - keep_keys(attributes, [])
 
-  # Drop every span event. They had attributes a moment ago; now they'd just be
-  # duration_ms=0 noise rows in Honeycomb. Remove from the pipeline if some
-  # events are worth keeping (e.g. exception events).
-  filter/drop_empty_events:
+  # Drop the gen_ai inference-details events now that their attrs live on the
+  # span. Without this they'd be duration_ms=0 noise rows in Honeycomb.
+  filter/drop_lifted_gen_ai_events:
     error_mode: ignore
     traces:
       spanevent:
-        - 'true'
+        - name == "gen_ai.client.inference.operation.details"
 
   # Boswell leaves a mark on every span he processes. Lets you reverse-lookup
   # which collector deployment, and which Lambda invocation, touched a span.
@@ -70,7 +72,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [transform/lift_event_attrs, filter/drop_empty_events, attributes/boswell]
+      processors: [transform/lift_gen_ai_event_attrs, filter/drop_lifted_gen_ai_events, attributes/boswell]
       exporters: [otlphttp/honeycomb]
   telemetry:
     logs:
