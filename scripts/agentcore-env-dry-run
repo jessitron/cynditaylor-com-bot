@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Print what scripts/agentcore-update would set as AgentCore environmentVariables,
+# without actually calling update-agent-runtime. Useful for sanity-checking
+# the OTEL endpoint + bearer token wiring before applying.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source .env
+# shellcheck disable=SC1091
+source collector/.env
+
+REGION="us-west-2"
+
+BOSWELL_FUNCTION_URL=$(aws lambda get-function-url-config \
+  --function-name boswell \
+  --region "${REGION}" \
+  --query FunctionUrl \
+  --output text)
+export BOSWELL_FUNCTION_URL
+
+python3 scripts/_build_agentcore_env_json.py | python3 -m json.tool
