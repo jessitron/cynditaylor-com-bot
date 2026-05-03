@@ -118,6 +118,17 @@ Tracked separately in `notes/TELEMETRY.md` — Honeycomb-friendly tracing is don
 
 **`runtimeSessionId` keying decision:** `mom-<sha256(from_header_addr)>`. We use the From header (`mail.commonHeaders.from[0]`), not `mail.source`, because SES rewrites the envelope-from to a per-message bounce mailbox when SES is the originating MTA (i.e. self-loop tests). Real moms emailing from gmail would have a stable `mail.source`; using From makes the session stable in both cases. `_print_session_id.py <addr>` computes the expected id.
 
+**Sender allowlist (added 2026-05-03):** dispatcher hard-codes 4 senders + any `@cyndibot.jessitron.honeydemo.io` (self-domain). Anyone else → `skipped/sender_not_allowed`, no AgentCore invoke. Two smokes in `lambda/invoke_agent/scripts/`:
+- `smoke` — real SES roundtrip from `pretend-mom@cyndibot…` (exercises the self-domain rule).
+- `smoke-deny` — `aws lambda invoke` with a synthesized SES event from `stranger@example.com` (exercises the deny path).
+
+Not yet covered: a smoke that exercises one of the four explicit allowlist entries with a real external sender. Plan for next session: send a real email from `jessitron@jessitron.com` (already verified for SES outbound, so the agent's reply will deliver back) and watch the lambda log + S3 reply.
+
+**SES verification status (as of 2026-05-03):**
+- Verified for outbound replies: `cyndibot.jessitron.honeydemo.io` (domain), `jessitron@jessitron.com`.
+- Verification email sent, awaiting click: `taylor777@sbcglobal.net` (mom).
+- Not yet requested: `jessitron@gmail.com`, `mamacatitron@gmail.com`. Send via `scripts/ses-verify-email <addr>` whenever wanted; recipient must click the link in the verification mail.
+
 ## Still pending
 
 - `GITHUB_TOKEN` in Secrets Manager + container-entrypoint shim. Required before `push_site_changes` works in the cloud.

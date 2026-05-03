@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Verify the dispatcher Lambda denies senders outside the allowlist.
+#
+# We can't actually *send* an email from a random external address via
+# our SES setup (we'd have to verify it as a sending identity), so this
+# test invokes the Lambda directly with a synthesized SES event whose
+# From: address is neither in ALLOWED_SENDERS nor on AGENT_DOMAIN. The
+# handler short-circuits before reading S3 or calling AgentCore, so the
+# fake messageId never matters.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+
+DENY_SENDER="${DENY_SENDER:-stranger@example.com}"
+RECIPIENT="${AGENT_USERNAME}@${AGENT_DOMAIN}"
+
+if command -v uv >/dev/null 2>&1; then
+  PY="uv run python"
+else
+  PY="python3"
+fi
+
+EVENT_FILE=$(mktemp -t cyndibot-deny-event.XXXXXX.json)
+RESP_FILE=$(mktemp -t cyndibot-deny-resp.XXXXXX.json)
+trap 'rm -f "${EVENT_FILE}" "${RESP_FILE}"' EXIT
+
+echo "=== Synthesizing SES event ==="
+echo "  sender:    ${DENY_SENDER}"
+echo "  recipient: ${RECIPIENT}"
+${PY} scripts/_synth_ses_event.py "${DENY_SENDER}" "${RECIPIENT}" > "${EVENT_FILE}"
+
+echo
+echo "=== aws lambda invoke ${LAMBDA_NAME} ==="
+aws lambda invoke \
+  --function-name "${LAMBDA_NAME}" \
+  --region "${AWS_REGION}" \
+  --cli-binary-format raw-in-base64-out \
+  --payload "fileb://${EVENT_FILE}" \
+  --log-type Tail \
+  "${RESP_FILE}" \
+  --output json \
+  > /dev/null
+
+echo "lambda response body:"
+cat "${RESP_FILE}"
+echo
+echo
+
+PARSED=$(${PY} -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+print(d.get('status', '?'), '|', d.get('reason', '?'), '|', d.get('sender', '?'))
+" "${RESP_FILE}")
+
+STATUS=$(echo "${PARSED}" | awk -F' \\| ' '{print $1}')
+REASON=$(echo "${PARSED}" | awk -F' \\| ' '{print $2}')
+SENDER=$(echo "${PARSED}" | awk -F' \\| ' '{print $3}')
+
+echo "parsed: status=${STATUS} reason=${REASON} sender=${SENDER}"
+echo
+
+if [[ "${STATUS}" == "skipped" && "${REASON}" == "sender_not_allowed" && "${SENDER}" == "${DENY_SENDER}" ]]; then
+  echo "PASS: dispatcher rejected non-allowlisted sender."
+else
+  echo "FAIL: expected status=skipped reason=sender_not_allowed sender=${DENY_SENDER}" >&2
+  exit 1
+fi

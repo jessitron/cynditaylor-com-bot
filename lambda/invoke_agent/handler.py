@@ -29,6 +29,18 @@ AGENT_DOMAIN = os.environ.get(
 )
 AGENT_RECIPIENT = f"{AGENT_USERNAME}@{AGENT_DOMAIN}".lower()
 
+# Hard-coded sender allowlist. Any address @AGENT_DOMAIN is also accepted
+# (we control that domain end-to-end via SES + DKIM, so self-loop test
+# fixtures like pretend-mom@cyndibot... pass without polluting this list).
+ALLOWED_SENDERS = frozenset(
+    {
+        "jessitron@jessitron.com",
+        "jessitron@gmail.com",
+        "mamacatitron@gmail.com",
+        "taylor777@sbcglobal.net",
+    }
+)
+
 _agentcore = boto3.client("bedrock-agentcore", region_name=REGION)
 
 
@@ -42,6 +54,16 @@ def _agent_recipient_match(recipients: list[str]) -> bool:
         if r and r.lower() == AGENT_RECIPIENT:
             return True
     return False
+
+
+def _sender_allowed(addr: str) -> bool:
+    a = addr.lower().strip()
+    if not a:
+        return False
+    if a in ALLOWED_SENDERS:
+        return True
+    _, _, domain = a.partition("@")
+    return domain == AGENT_DOMAIN.lower()
 
 
 def _sender_from_event(mail: dict) -> str:
@@ -87,6 +109,13 @@ def handler(event, context):
             AGENT_RECIPIENT,
         )
         return {"status": "skipped", "reason": "recipient_filter", "recipients": recipients}
+
+    if not _sender_allowed(sender):
+        logger.warning(
+            "sender %s not in allowlist; skipping",
+            sender,
+        )
+        return {"status": "skipped", "reason": "sender_not_allowed", "sender": sender}
 
     if not message_id:
         raise RuntimeError("ses.mail.messageId missing — cannot derive S3 key")
