@@ -165,9 +165,9 @@ def send_reply_impl(
         reply["In-Reply-To"] = in_reply_to
         refs = f"{references} {in_reply_to}".strip() if references else in_reply_to
         reply["References"] = refs
-    session_id = get_session_id() or "(none — tracing not configured with a session id)"
+    thread_id = get_session_id() or "(none — tracing not configured with a thread id)"
     pushed_sha = get_last_pushed_sha() or "(none — no push in this session)"
-    body_text = f"{body_text}\n\n--\nsession: {session_id}\nsite commit: {pushed_sha}"
+    body_text = f"{body_text}\n\n--\nthread: {thread_id}\nsite commit: {pushed_sha}"
     reply.set_content(body_text)
 
     ses = boto3.client("sesv2", region_name=SES_REGION)

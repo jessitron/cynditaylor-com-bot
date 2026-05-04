@@ -1,4 +1,5 @@
 import sys
+import uuid
 
 from opentelemetry import trace
 
@@ -12,8 +13,12 @@ def main() -> None:
     s3_key = sys.argv[1]
 
     configure_tracing()
+    invocation_id = uuid.uuid4().hex
     agent = build_agent()
-    agent(f"The inbound email is at S3 key: {s3_key}")
+    tracer = trace.get_tracer("agent.inbound")
+    with tracer.start_as_current_span("agent.invocation") as span:
+        span.set_attribute("invocation.id", invocation_id)
+        agent(f"The inbound email is at S3 key: {s3_key}")
     print()
 
     trace.get_tracer_provider().shutdown()

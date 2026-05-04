@@ -61,9 +61,28 @@ ALLOWED_SENDERS = frozenset(
 _agentcore = boto3.client("bedrock-agentcore", region_name=REGION)
 
 
-def _runtime_session_id(sender: str) -> str:
-    digest = hashlib.sha256(sender.lower().encode("utf-8")).hexdigest()
-    return f"mom-{digest}"
+def _thread_root_message_id(headers: dict[str, str], own_message_id: str) -> str:
+    """Pick the thread-root Message-ID per JWZ-lite.
+
+    1. References: → first Message-ID in the list is the thread root.
+    2. Else In-Reply-To: → that Message-ID is the thread root.
+    3. Else this email IS the thread root → use its own Message-ID.
+    """
+    refs = headers.get("references", "").strip()
+    if refs:
+        first = refs.split()[0]
+        return first
+    in_reply_to = headers.get("in-reply-to", "").strip()
+    if in_reply_to:
+        return in_reply_to
+    return own_message_id
+
+
+def _thread_id_from_headers(headers: dict[str, str], own_message_id: str) -> str:
+    root = _thread_root_message_id(headers, own_message_id)
+    canonical = root.strip().strip("<>").lower()
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"thread-{digest}"
 
 
 def _matched_agent_recipient(recipients: list[str]) -> str | None:
@@ -140,8 +159,8 @@ def _send_dispatcher_event(fields: dict) -> None:
                 )
             else:
                 logger.info(
-                    "honeycomb event sent: event_id=%s outcome=%s",
-                    fields.get("event_id"),
+                    "honeycomb event sent: invocation.id=%s outcome=%s",
+                    fields.get("invocation.id"),
                     fields.get("dispatcher.outcome"),
                 )
     except urllib.error.HTTPError as e:
@@ -154,14 +173,14 @@ def _send_dispatcher_event(fields: dict) -> None:
 def handler(event, context):
     start = time.time()
     fields: dict = {
-        "event_id": str(uuid.uuid4()),
+        "invocation.id": str(uuid.uuid4()),
         "faas.invocation_id": getattr(context, "aws_request_id", "") or "",
         "faas.name": getattr(context, "function_name", "") or "",
         "email.to.agent_addresses": ",".join(sorted(AGENT_RECIPIENTS)),
         "dispatcher.outcome": "unknown",
         "dispatcher.agent_invoked": False,
     }
-    logger.info("event_id=%s", fields["event_id"])
+    logger.info("invocation.id=%s", fields["invocation.id"])
 
     try:
         records = event.get("Records") or []
@@ -230,21 +249,38 @@ def handler(event, context):
             raise RuntimeError("ses.mail.messageId missing — cannot derive S3 key")
 
         s3_key = f"{INBOUND_PREFIX}{message_id}"
-        session_id = _runtime_session_id(sender)
-        payload = json.dumps({"s3_key": s3_key}).encode("utf-8")
+        own_message_id = headers.get("message-id", "") or f"<{message_id}@ses>"
+        thread_id = _thread_id_from_headers(headers, own_message_id)
+        invocation_id = fields["invocation.id"]
+        payload = json.dumps(
+            {
+                "s3_key": s3_key,
+                "email_thread_id": thread_id,
+                "invocation_id": invocation_id,
+                "email_from": sender,
+            }
+        ).encode("utf-8")
 
-        fields.update({"session.id": session_id, "aws.s3.key": s3_key})
+        fields.update(
+            {
+                "session.id": thread_id,
+                "email.thread.id": thread_id,
+                "aws.s3.key": s3_key,
+            }
+        )
 
         logger.info(
-            "invoking agent runtime: session_id=%s s3_key=%s",
-            session_id,
+            "invoking agent runtime: thread_id=%s invocation_id=%s email_from=%s s3_key=%s",
+            thread_id,
+            invocation_id,
+            sender,
             s3_key,
         )
 
         try:
             response = _agentcore.invoke_agent_runtime(
                 agentRuntimeArn=RUNTIME_ARN,
-                runtimeSessionId=session_id,
+                runtimeSessionId=thread_id,
                 contentType="application/json",
                 payload=payload,
             )
@@ -274,7 +310,8 @@ def handler(event, context):
 
         return {
             "status": "invoked",
-            "session_id": session_id,
+            "thread_id": thread_id,
+            "invocation_id": invocation_id,
             "s3_key": s3_key,
             "agent_status_code": agent_status,
         }

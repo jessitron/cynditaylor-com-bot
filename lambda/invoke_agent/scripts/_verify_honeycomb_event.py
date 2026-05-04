@@ -1,6 +1,6 @@
 """Assert the dispatcher Lambda sent a Honeycomb event with a given outcome.
 
-Polls CloudWatch for `honeycomb event sent: event_id=<id> outcome=<outcome>`
+Polls CloudWatch for `honeycomb event sent: invocation_id=<id> outcome=<outcome>`
 log lines since the given start-time, prints all of them, and passes if any
 match the expected outcome. The full smoke roundtrip generates two invocations
 (original inbound → invoked, agent's reply → skipped_recipient_filter), so we
@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 
-PATTERN = re.compile(r"honeycomb event sent: event_id=(\S+) outcome=(\S+)")
+PATTERN = re.compile(r"honeycomb event sent: invocation\.id=(\S+) outcome=(\S+)")
 
 
 def _filter_log_events(log_group: str, region: str, since_ms: int) -> list[dict]:
@@ -51,11 +51,11 @@ def _parse(events: list[dict]) -> list[tuple[str, str]]:
         m = PATTERN.search(ev.get("message", ""))
         if not m:
             continue
-        event_id, outcome = m.group(1), m.group(2)
-        if event_id in seen:
+        invocation_id, outcome = m.group(1), m.group(2)
+        if invocation_id in seen:
             continue
-        seen.add(event_id)
-        pairs.append((event_id, outcome))
+        seen.add(invocation_id)
+        pairs.append((invocation_id, outcome))
     return pairs
 
 
@@ -86,9 +86,9 @@ def main() -> int:
 
     print(f"events sent ({len(pairs)}):")
     matched = False
-    for event_id, outcome in pairs:
+    for invocation_id, outcome in pairs:
         marker = "  *" if outcome == args.expected_outcome and not matched else "   "
-        print(f"{marker} event_id={event_id} outcome={outcome}")
+        print(f"{marker} invocation_id={invocation_id} outcome={outcome}")
         if outcome == args.expected_outcome:
             matched = True
 

@@ -50,7 +50,7 @@ d = json.load(sys.stdin)
 for e in d.get('events', []):
     msg = e.get('message','')
     if 'outcome=invoked' in msg:
-        m = re.search(r'event_id=(\S+)', msg)
+        m = re.search(r'invocation\.id=(\S+)', msg)
         if m:
             print(m.group(1)); break
 " 2>/dev/null || true)
@@ -65,9 +65,9 @@ if [[ -z "${EVENT_ID}" ]]; then
   exit 1
 fi
 
-echo "PASS: dispatcher event_id=${EVENT_ID}"
+echo "PASS: dispatcher invocation_id=${EVENT_ID}"
 echo
-echo "Now query the Honeycomb dispatcher dataset for this event_id and confirm:"
+echo "Now query the Honeycomb dispatcher dataset for this invocation_id and confirm:"
 echo "  - email.headers.in_reply_to is set"
 echo "  - email.headers.references is set"
 echo "  - email.headers.names contains 'in-reply-to,references'"

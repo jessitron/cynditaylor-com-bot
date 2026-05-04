@@ -54,7 +54,7 @@ echo "landed: s3://${INBOUND_BUCKET}/${KEY}"
 echo
 
 echo "=== Waiting for dispatcher Lambda to fire (up to 60s) ==="
-SESSION_ID=""
+THREAD_ID=""
 for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
   sleep 5
   EVENTS=$(aws logs filter-log-events \
@@ -64,12 +64,12 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
             --filter-pattern "invoking agent runtime" \
             --output json 2>/dev/null || echo '{"events":[]}')
   if echo "${EVENTS}" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('events') else 1)" 2>/dev/null; then
-    SESSION_ID=$(echo "${EVENTS}" \
+    THREAD_ID=$(echo "${EVENTS}" \
       | python3 -c "
 import json, re, sys
 d = json.load(sys.stdin)
 for e in d.get('events', []):
-    m = re.search(r'session_id=(\S+)', e.get('message', ''))
+    m = re.search(r'thread_id=(\S+)', e.get('message', ''))
     if m:
         print(m.group(1)); break
 ")
@@ -78,7 +78,7 @@ for e in d.get('events', []):
   echo "  not yet (attempt ${i})"
 done
 
-if [[ -z "${SESSION_ID}" ]]; then
+if [[ -z "${THREAD_ID}" ]]; then
   echo "FAIL: did not see 'invoking agent runtime' in lambda logs (within 60s)" >&2
   echo
   echo "Recent ${LOG_GROUP} logs:" >&2
@@ -96,7 +96,7 @@ for e in d.get('events', []):
   exit 1
 fi
 
-echo "PASS: lambda dispatched to runtime; session_id=${SESSION_ID}"
+echo "PASS: lambda dispatched to runtime; thread_id=${THREAD_ID}"
 echo
 
 echo "=== Waiting for AgentCore response in lambda logs (up to 90s) ==="
@@ -159,4 +159,4 @@ echo "(dataset: ${HONEYCOMB_DATASET}, env: cynditaylor-com-bot, team: modernity)
 echo
 echo "=== Agent trace ==="
 echo "team modernity, env cynditaylor-com-bot, dataset cynditaylor-com-bot"
-echo "filter recent traces by attribute 'session.id' = ${SESSION_ID}"
+echo "filter recent traces by attribute 'session.id' = ${THREAD_ID}"

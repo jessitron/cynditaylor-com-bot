@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# AST-parse the files touched by the thread-scoped-session slice.
+# Pure syntax check; doesn't import, so no runtime deps needed.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+python3 scripts/_syntax_check.py
