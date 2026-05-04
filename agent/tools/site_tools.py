@@ -19,6 +19,13 @@ GIT_USER_EMAIL = os.environ.get(
 )
 
 
+_LAST_PUSHED_SHA: str | None = None
+
+
+def get_last_pushed_sha() -> str | None:
+    return _LAST_PUSHED_SHA
+
+
 def _run_git(*args: str, cwd: Path | None = None) -> str:
     result = subprocess.run(
         ["git", *args],
@@ -44,6 +51,8 @@ def _validate_path(rel_path: str) -> Path:
 
 
 def sync_workspace_impl() -> dict[str, Any]:
+    global _LAST_PUSHED_SHA
+    _LAST_PUSHED_SHA = None
     if not (WORKSPACE_DIR / ".git").exists():
         WORKSPACE_DIR.parent.mkdir(parents=True, exist_ok=True)
         _run_git(
@@ -119,11 +128,14 @@ def push_site_changes_impl(remote_branch: str = "main") -> dict[str, Any]:
     plumbing here. On auth failure, git exits non-zero and subprocess
     raises -- the caller sees the original git stderr.
     """
+    global _LAST_PUSHED_SHA
     _run_git("push", "origin", f"HEAD:{remote_branch}")
+    head = _run_git("rev-parse", "HEAD").strip()
+    _LAST_PUSHED_SHA = head
     return {
         "pushed": True,
         "remote_branch": remote_branch,
-        "head": _run_git("rev-parse", "HEAD").strip(),
+        "head": head,
     }
 
 
