@@ -177,9 +177,18 @@ Plan:
 - HEIC → JPG only; do not commit the original HEIC. Other formats kept as-is.
 - Vision pass deferred to a later iteration (see below).
 
-### Later iteration: vision pass
+### Later iteration: vision pass ✅ (2026-05-04)
 
-Once v1 is in, pass image bytes back to the model as multimodal content blocks so Sonnet can actually look at the photos. Wins: meaningful alt text, layout decisions (portrait vs. landscape for `gallery.html`), catching sideways photos. Cost: ~1.5K input tokens per phone-photo per Bedrock turn. Mechanism TBD — likely have `parse_inbound`'s tool result include `ImageContent` blocks alongside the JSON metadata, so the agent sees them on the next turn without an extra round trip; verify Strands surfaces multimodal tool results to Bedrock the way we think before committing. Fallback: a small `view_site_image(path)` tool that returns image content on demand.
+Picked the on-demand `view_site_image(path)` route over enriching `parse_inbound`'s result. Reasons: keeps the parse tool cheap and JSON-only (no big tokens until the agent decides it cares), and the agent can re-view selectively after deletes. Tool returns a Strands `ToolResult` with `[{"text": ...}, {"image": {"format", "source": {"bytes"}}}]`; Strands passes those blocks straight through to Bedrock Converse.
+
+Implementation notes:
+- Downsize to 1568px long-edge via PIL (Anthropic's recommendation; also keeps us under Bedrock's per-image size limit). Smoke against `bear seriously.jpg`: 5.4 MB → 532 KB, no quality complaints.
+- Format whitelist `{jpg, jpeg, png, gif, webp}` — HEIC was already converted to JPG by `parse_inbound`, so the path mom's email gives us is always supported.
+- Span `view_site_image` records input/output dimensions + bytes so we can spot-check downsize behavior in Honeycomb.
+- Prompt updated: step 4 now says "view each attachment you might keep" before deciding placement; step 6 says alt text should be grounded in what the agent actually saw.
+- `scripts/smoke-view-image` exercises the wrapping + downsize logic against an existing workspace image — no Bedrock/SES/S3 hits.
+
+Pending: a real cloud roundtrip where mom (or pretend-mom) sends a photo and we verify the agent's reply mentions image content it actually saw, and that Honeycomb shows the `view_site_image` span.
 
 ## Slice: thread-scoped session id (shipped 2026-05-04)
 

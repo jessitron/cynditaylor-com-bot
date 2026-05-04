@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Smoke-test view_site_image_impl: load a real image from the workspace,
+# verify it returns a Strands ToolResult with one image content block
+# (downsized if needed). Doesn't talk to Bedrock / SES / S3.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+uv run python scripts/_check_view_image.py

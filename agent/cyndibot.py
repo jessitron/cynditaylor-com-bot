@@ -9,6 +9,7 @@ from agent.tools.site_tools import (
     push_site_changes,
     read_site_file,
     sync_workspace,
+    view_site_image,
     write_site_file,
 )
 
@@ -38,9 +39,13 @@ You will be given an S3 key pointing at a raw email. Workflow:
        attachments; sync_workspace on the next email will clean them.
      - If YES, continue.
 
-  4. If parse_inbound returned attachments, decide how each should be
-     used. For ones you want to keep, plan where to reference them in
-     HTML (gallery.html is the usual home; pages can also embed them
+  4. If parse_inbound returned attachments, call view_site_image on
+     each one you might keep -- you need to actually look at the photo
+     to write good alt text, decide layout (portrait vs landscape,
+     where it fits on the page), and catch sideways or unrelated
+     shots. Then decide how each attachment should be used. For ones
+     you want to keep, plan where to reference them in HTML
+     (gallery.html is the usual home; pages can also embed them
      directly). For ones you don't want -- mom over-attached, or you
      can't tell which she meant -- call delete_site_file on each.
      ANY attachment you neither reference in HTML nor delete will end
@@ -54,8 +59,9 @@ You will be given an S3 key pointing at a raw email. Workflow:
   6. Call write_site_file with the full new contents of each file you
      change. When embedding an image, use the `path` from the
      attachments list (e.g. "images/garden.jpg") and write meaningful
-     alt text -- use mom's description from the email body if she gave
-     one, otherwise a short generic description.
+     alt text based on what you saw via view_site_image -- prefer
+     mom's own description from the email body when she gave one, but
+     ground it in the actual image content.
 
   7. Changelog convention. A file `changelog.html` at the repo root
      records every change. If it doesn't exist yet, create it with the
@@ -95,6 +101,7 @@ def build_agent() -> Agent:
             read_site_file,
             write_site_file,
             delete_site_file,
+            view_site_image,
             commit_site_changes,
             push_site_changes,
         ],

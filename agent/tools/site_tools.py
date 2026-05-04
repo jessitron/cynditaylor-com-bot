@@ -2,10 +2,26 @@
 
 import os
 import subprocess
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+from opentelemetry import trace
+from PIL import Image
 from strands import tool
+
+_tracer = trace.get_tracer(__name__)
+
+# Anthropic recommends <=1568px on the long edge for Claude vision; also
+# keeps us comfortably under Bedrock's per-image size limit.
+_VIEW_MAX_EDGE = 1568
+_BEDROCK_IMAGE_FORMATS = {
+    "jpg": "jpeg",
+    "jpeg": "jpeg",
+    "png": "png",
+    "gif": "gif",
+    "webp": "webp",
+}
 
 WORKSPACE_DIR = Path(
     os.environ.get("CYNDIBOT_WORKSPACE", "cynditaylor-com")
@@ -108,6 +124,57 @@ def delete_site_file_impl(path: str) -> dict[str, Any]:
     return {"deleted": str(target.relative_to(WORKSPACE_DIR))}
 
 
+def view_site_image_impl(path: str) -> dict[str, Any]:
+    target = _validate_path(path)
+    if not target.exists() or not target.is_file():
+        raise FileNotFoundError(f"no such file in workspace: {path!r}")
+    suffix = target.suffix.lower().lstrip(".")
+    if suffix not in _BEDROCK_IMAGE_FORMATS:
+        raise ValueError(
+            f"unsupported image format {target.suffix!r}; "
+            f"Bedrock accepts {sorted(set(_BEDROCK_IMAGE_FORMATS.values()))}"
+        )
+    fmt = _BEDROCK_IMAGE_FORMATS[suffix]
+
+    with _tracer.start_as_current_span("view_site_image") as span:
+        span.set_attribute("image.path", str(target.relative_to(WORKSPACE_DIR)))
+        original_bytes = target.read_bytes()
+        span.set_attribute("image.input_bytes", len(original_bytes))
+
+        img = Image.open(BytesIO(original_bytes))
+        span.set_attribute("image.input_width", img.width)
+        span.set_attribute("image.input_height", img.height)
+        long_edge = max(img.width, img.height)
+
+        if long_edge > _VIEW_MAX_EDGE:
+            scale = _VIEW_MAX_EDGE / long_edge
+            new_size = (int(img.width * scale), int(img.height * scale))
+            resized = img.convert("RGB" if fmt == "jpeg" else img.mode).resize(
+                new_size, Image.LANCZOS
+            )
+            buf = BytesIO()
+            save_kwargs: dict[str, Any] = {"format": fmt.upper()}
+            if fmt == "jpeg":
+                save_kwargs["quality"] = 85
+            resized.save(buf, **save_kwargs)
+            view_bytes = buf.getvalue()
+            span.set_attribute("image.output_width", new_size[0])
+            span.set_attribute("image.output_height", new_size[1])
+        else:
+            view_bytes = original_bytes
+            span.set_attribute("image.output_width", img.width)
+            span.set_attribute("image.output_height", img.height)
+        span.set_attribute("image.output_bytes", len(view_bytes))
+
+    return {
+        "status": "success",
+        "content": [
+            {"text": f"Viewing {target.relative_to(WORKSPACE_DIR)}"},
+            {"image": {"format": fmt, "source": {"bytes": view_bytes}}},
+        ],
+    }
+
+
 def commit_site_changes_impl(message: str) -> dict[str, Any]:
     _run_git("add", "-A")
     status = _run_git("status", "--porcelain").strip()
@@ -195,6 +262,24 @@ def delete_site_file(path: str) -> dict[str, Any]:
             exist or is a directory.
     """
     return delete_site_file_impl(path)
+
+
+@tool
+def view_site_image(path: str) -> dict[str, Any]:
+    """Look at an image in the site workspace.
+
+    Returns the image to you so you can actually see it. Use before
+    embedding an attachment in HTML to: write meaningful alt text,
+    choose layout (portrait vs landscape, where it fits on the page),
+    and catch sideways or unrelated photos before they go live.
+
+    Args:
+        path: Path relative to the workspace root, e.g.
+            "images/garden.jpg". Must be one of jpg, jpeg, png, gif,
+            webp -- HEIC attachments are already converted to JPG by
+            parse_inbound, so use the path it returned.
+    """
+    return view_site_image_impl(path)
 
 
 @tool
