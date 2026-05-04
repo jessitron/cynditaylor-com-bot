@@ -5,7 +5,7 @@
 - **AWS account:** jessitron-sandbox (`414852377253`), region `us-west-2`.
 - **Model:** Claude Sonnet 4.5 via Bedrock inference profile `us.anthropic.claude-sonnet-4-5-20250929-v1:0`. Must use inference-profile IDs, not bare model IDs.
 - **Repo strategy:** clone `cynditaylor-com` into AgentCore session storage at `/mnt/workspace/cynditaylor-com`, commit via shelled `git`. Reset to `origin/main` at start of each invoke.
-- **Session model:** one AgentCore `runtimeSessionId` per mom's email address. 14-day idle TTL is plenty. *(Under revision — see [Slice: thread-scoped session id](slice-thread-scoped-session.md). Repointing at email thread to fix conversation-history leakage between unrelated emails and to make `session.id` mean "this conversation" instead of "this person".)*
+- **Session model:** one AgentCore `runtimeSessionId` per email **thread** (`thread-<sha256(thread-root-Message-ID)>`, JWZ-lite over References / In-Reply-To / own Message-ID). 14-day idle TTL is plenty. New thread → fresh microVM → clean Strands `_agent`; replies in the same thread reuse the warm microVM's conversation history. Each Lambda invocation gets its own `invocation.id` (uuid4) so individual emails inside a thread are still distinguishable. The dispatcher passes `s3_key`, `email_thread_id`, `invocation_id`, `email_from` in the AgentCore payload; the agent stamps them on its `agent.invocation` root span and on the Resource. Shipped 2026-05-04 — see [slice-thread-scoped-session.md](slice-thread-scoped-session.md).
 - **Conversation memory:** no new store. Inbound SES message (landing in S3) + SES sent-log + git log on the site repo are authoritative. Strands `FileSessionManager` in session storage is convenience, not source of truth.
 - **Observability:** OTel → Arize Phoenix (self-hosted locally, `http://localhost:6006/v1/traces`). Honeycomb may come later.
 - **Build tooling:** `uv`.
@@ -145,7 +145,7 @@ Tracked separately in `notes/TELEMETRY.md` — Honeycomb-friendly tracing is don
 3. ✅ Recipient filter wired: Lambda invokes the agent for any of `cyndi@`, `bot@`, `robot@`, `jeeves@` on `cyndibot.jessitron.honeydemo.io` (configurable via `CYNDIBOT_AGENT_USERNAMES`, comma-separated). The agent's reply (sent FROM cyndibot@ TO pretend-mom@) re-enters the rule, but the Lambda correctly no-ops on it — no infinite recursion. Confirmed in CloudWatch.
 4. ✅ Smoke (`lambda/invoke_agent/scripts/smoke`) sends a real pretend-mom email via SES, polls for the dispatcher's "invoking agent runtime" log line, then waits for the `agentcore response: status=200`. First green run: lambda dispatched in <10s, AgentCore returned 200, agent reply landed in S3 as a separate object.
 
-**`runtimeSessionId` keying decision:** `mom-<sha256(from_header_addr)>`. We use the From header (`mail.commonHeaders.from[0]`), not `mail.source`, because SES rewrites the envelope-from to a per-message bounce mailbox when SES is the originating MTA (i.e. self-loop tests). Real moms emailing from gmail would have a stable `mail.source`; using From makes the session stable in both cases. `_print_session_id.py <addr>` computes the expected id.
+**`runtimeSessionId` keying decision (superseded 2026-05-04):** initial scheme was `mom-<sha256(from_header_addr)>`, picked so the microVM stayed warm per real-life mom. Replaced with `thread-<sha256(thread-root-Message-ID)>` (JWZ-lite) to fix Strands `Agent` history leaking across unrelated emails — see slice-thread-scoped-session.md and the retro in that file.
 
 **Sender allowlist (added 2026-05-03):** dispatcher hard-codes 4 senders + any `@cyndibot.jessitron.honeydemo.io` (self-domain). Anyone else → `skipped/sender_not_allowed`, no AgentCore invoke. Two smokes in `lambda/invoke_agent/scripts/`:
 - `smoke` — real SES roundtrip from `pretend-mom@cyndibot…` (exercises the self-domain rule).
@@ -181,13 +181,11 @@ Plan:
 
 Once v1 is in, pass image bytes back to the model as multimodal content blocks so Sonnet can actually look at the photos. Wins: meaningful alt text, layout decisions (portrait vs. landscape for `gallery.html`), catching sideways photos. Cost: ~1.5K input tokens per phone-photo per Bedrock turn. Mechanism TBD — likely have `parse_inbound`'s tool result include `ImageContent` blocks alongside the JSON metadata, so the agent sees them on the next turn without an extra round trip; verify Strands surfaces multimodal tool results to Bedrock the way we think before committing. Fallback: a small `view_site_image(path)` tool that returns image content on demand.
 
-## Slice: thread-scoped session id (planned)
+## Slice: thread-scoped session id (shipped 2026-05-04)
 
-Repoint `runtimeSessionId` / `session.id` from per-sender to per-email-thread, and add `email.from` + `email.thread.id` + `invocation.id` as first-class queryable dimensions on the dispatcher event, CloudWatch logs, and the agent's root span.
+Repointed `runtimeSessionId` / `session.id` from per-sender to per-email-thread; added `email.from`, `email.thread.id`, `invocation.id` as first-class queryable dimensions on the dispatcher event, CloudWatch logs, and the agent's `agent.invocation` root span (also as Resource attrs on every agent span). Full plan + retro: **[notes/slice-thread-scoped-session.md](slice-thread-scoped-session.md)**.
 
-Full plan, motivation (current bug: Strands `Agent` conversation history leaks across unrelated emails because the global `_agent` cache outlives any single request), thread-id derivation algorithm, implementation tasks, and verification: **[notes/slice-thread-scoped-session.md](slice-thread-scoped-session.md)**.
-
-First task when work begins: confirm `mail.headers` is on the SES Lambda invocation event (we need `In-Reply-To` and `References`, neither of which is in `mail.commonHeaders`).
+Verified end-to-end: deployed dispatcher + AgentCore runtime, then ran `lambda/invoke_agent/scripts/smoke` (fresh email → thread id derived from own Message-ID) and `scripts/smoke-reply` (In-Reply-To/References set → thread id derived from parent). Both invocations show `session.id == email.thread.id`, populated `invocation.id`, and `email.from` on both the dispatcher event and the agent's span. Verification gate (mail.headers on the SES Lambda event) was confirmed first by stamping the headers list onto the dispatcher event and querying Honeycomb.
 
 ## Still pending
 

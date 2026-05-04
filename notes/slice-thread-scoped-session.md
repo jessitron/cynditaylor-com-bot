@@ -1,6 +1,6 @@
 # Slice: Thread-scoped session id
 
-Status: planned, not started.
+Status: shipped 2026-05-04.
 
 ## Goal
 
@@ -90,7 +90,14 @@ The dispatcher needs `In-Reply-To` and `References` headers, which are NOT in `m
 - **The dispatcher's CloudWatch retention.** If we expect to query CloudWatch by thread id, make sure log lines actually include it (task 2 above). Honeycomb is the primary query target.
 - **`email.thread.id` and `session.id` having identical values** is intentional. It expresses that we're scoping session to email thread.
 
-## Open questions to resolve when work begins
+## Open questions resolved
 
-- `agent/inbound.py` parity: stamp invocation_id locally, or skip?
-- Whether to also fold `email.from` into the agent's Resource (so it's a column on every span) -- yes, do it! Anything constant for the whole AgentCore instance is a resource attribute.
+- `agent/inbound.py` parity: **yes** — local CLI generates a uuid4 `invocation.id` and stamps it on the `agent.invocation` span. `email_thread_id` stays empty when running directly (no inbound thread context).
+- Fold `email.from` into the agent's Resource: **yes**, done. `email.from` and `email.thread.id` both ride on the Resource alongside `session.id`. Constant for the whole microVM lifetime, which is one thread.
+
+## Retro
+
+- **Verification gate paid off.** Stamping `email.headers.{names,in_reply_to,references,...}` onto the existing dispatcher Honeycomb event was a low-cost way to confirm SES populates `mail.headers` with In-Reply-To/References. Beat any temporary log-line approach: queryable, kept around for free, no second deploy. The header attrs stay on the dispatcher event going forward.
+- **`smoke-reply` is worth keeping.** Sends a pretend-mom email with In-Reply-To + References preset. Mirrors `smoke` but exercises the threaded-reply path. Useful regression check any time threading logic changes.
+- **`session.id` and `email.thread.id` carry the same value.** Intentional. `session.id` is OTel-conventional and what cross-tool queries default to; `email.thread.id` makes the domain meaning explicit. Cheap to carry both columns.
+- **What I'd do differently:** the implementation was small and fell out cleanly — Resource carries thread/from, `agent.invocation` span carries invocation.id. Nothing to second-guess. The only friction was renaming `event_id` → `invocation.id` across the dispatcher's log line, the verifier script's regex, and the smoke scripts; a single rename ripples through more than expected because the Honeycomb log-format is grep'd by tooling.
