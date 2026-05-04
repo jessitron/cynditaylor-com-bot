@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Build the cyndibot container, push to ECR, update the AgentCore runtime,
+# wait until it's READY. The full ship-it pipeline.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+echo "=== 1/4 build ==="
+scripts/container-build
+echo
+
+echo "=== 2/4 push to ECR ==="
+scripts/container-push-ecr
+echo
+
+echo "=== 3/4 update AgentCore runtime ==="
+scripts/agentcore-update
+echo
+
+echo "=== 4/4 wait for READY ==="
+scripts/agentcore-wait-ready
+echo
+
+echo "=== deploy complete ==="

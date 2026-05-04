@@ -20,6 +20,13 @@ The target site repo (`cynditaylor-com/`) is gitignored — if it appears locall
 
 See README.md for the full architecture and the rationale in "Key decisions" (Strands for AWS-native + OTel, clone-into-session-storage over direct GitHub API, no confirmation step because the site is low-risk, Phoenix locally + Honeycomb in cloud).
 
+## Components
+
+- `agent/` — Strands agent. **Build/run/deploy/smoke scripts in `agent/README.md`.**
+- `lambda/invoke_agent/` — SES → Lambda → AgentCore dispatcher. Deploy/smoke scripts under `lambda/invoke_agent/scripts/`; setup steps in `infra/README.md`.
+- `collector/` — Boswell OTel collector lambda. See `collector/README.md`.
+- `infra/README.md` — one-time AWS setup commands (SES, Route 53, S3, IAM) and reproducible state-changes log.
+
 ## Working conventions (from `.augment-guidelines`)
 
 - **Plans and summaries go in `notes/ACTIVE.md`**, not in chat output. Create `notes/` if it doesn't exist.
