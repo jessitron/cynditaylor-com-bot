@@ -1,7 +1,5 @@
 import email
-import math
 import re
-import time
 from email import policy
 from email.message import EmailMessage
 from io import BytesIO
@@ -23,11 +21,11 @@ SES_REGION = "us-west-2"
 REPLY_FROM = "Cyndibot <bot@cyndibot.jessitron.honeydemo.io>"
 
 # https://aws.amazon.com/ses/pricing/ — marginal rate after free tier.
+# Inbound costs (receipt + chunk-charge) are the dispatcher's responsibility;
+# see lambda/invoke_agent.
 SES_SEND_PRICE_USD = 0.0001
-SES_RECEIPT_PRICE_USD = 0.0001
-SES_RECEIPT_CHUNK_PRICE_USD = 0.00009  # per 256KB chunk of incoming mail
-SES_RECEIPT_CHUNK_BYTES = 256 * 1024
 
+_tracer = trace.get_tracer(__name__)
 _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
 
 
@@ -66,36 +64,50 @@ def _unique_path(images_dir: Path, name: str) -> Path:
         n += 1
 
 
-def _write_image_attachment(part, images_dir: Path) -> tuple[dict[str, Any], int]:
+def _convert_heic_to_jpg(payload: bytes, target: Path, original_filename: str) -> int:
+    """Convert HEIC bytes to JPG at `target`. Returns final on-disk size.
+
+    Wrapped in its own span so a slow conversion (large iPhone photo)
+    surfaces as a discrete operation rather than a stamped attr on the
+    parse span. One span per attachment if mom sends multiple HEICs.
+    """
+    with _tracer.start_as_current_span("convert_heic_to_jpg") as span:
+        span.set_attribute("image.original_filename", original_filename)
+        span.set_attribute("image.input_bytes", len(payload))
+        Image.open(BytesIO(payload)).convert("RGB").save(
+            target, format="JPEG", quality=90
+        )
+        output_bytes = target.stat().st_size
+        span.set_attribute("image.output_bytes", output_bytes)
+        span.set_attribute(
+            "image.target_path", str(target.relative_to(WORKSPACE_DIR))
+        )
+        return output_bytes
+
+
+def _write_image_attachment(part, images_dir: Path) -> dict[str, Any]:
     raw_filename = part.get_filename() or "attachment"
     safe_name = _sanitize_filename(raw_filename)
     content_type = part.get_content_type()
     payload = part.get_payload(decode=True)
 
-    heic_ms = 0
     if _is_heic(content_type, safe_name):
         target_name = Path(safe_name).stem + ".jpg"
         target = _unique_path(images_dir, target_name)
-        start = time.perf_counter()
-        Image.open(BytesIO(payload)).convert("RGB").save(
-            target, format="JPEG", quality=90
-        )
-        heic_ms = int((time.perf_counter() - start) * 1000)
+        final_size = _convert_heic_to_jpg(payload, target, raw_filename)
         final_content_type = "image/jpeg"
-        final_size = target.stat().st_size
     else:
         target = _unique_path(images_dir, safe_name)
         target.write_bytes(payload)
         final_content_type = content_type
         final_size = len(payload)
 
-    meta = {
+    return {
         "path": str(target.relative_to(WORKSPACE_DIR)),
         "original_filename": raw_filename,
         "size_bytes": final_size,
         "content_type": final_content_type,
     }
-    return meta, heic_ms
 
 
 def parse_inbound_impl(s3_key: str) -> dict[str, Any]:
@@ -105,23 +117,16 @@ def parse_inbound_impl(s3_key: str) -> dict[str, Any]:
 
     images_dir = WORKSPACE_DIR / "images"
     attachments: list[dict[str, Any]] = []
-    heic_total_ms = 0
     bytes_total = 0
     for part in msg.iter_attachments():
         if not part.get_content_type().startswith("image/"):
             continue
         images_dir.mkdir(parents=True, exist_ok=True)
-        meta, heic_ms = _write_image_attachment(part, images_dir)
+        meta = _write_image_attachment(part, images_dir)
         attachments.append(meta)
-        heic_total_ms += heic_ms
         bytes_total += meta["size_bytes"]
 
-    chunks = max(1, math.ceil(len(raw) / SES_RECEIPT_CHUNK_BYTES))
     span = trace.get_current_span()
-    span.set_attribute("cost.ses.receipt.qty", 1)
-    span.set_attribute("cost.ses.receipt.price", SES_RECEIPT_PRICE_USD)
-    span.set_attribute("cost.ses.receipt_chunks.qty", chunks)
-    span.set_attribute("cost.ses.receipt_chunks.price", SES_RECEIPT_CHUNK_PRICE_USD)
     span.set_attribute("email.attachment.count", len(attachments))
     if attachments:
         span.set_attribute("email.attachment.bytes_total", bytes_total)
@@ -129,8 +134,6 @@ def parse_inbound_impl(s3_key: str) -> dict[str, Any]:
             "email.attachment.types",
             ",".join(a["content_type"] for a in attachments),
         )
-        if heic_total_ms > 0:
-            span.set_attribute("email.attachment.heic_conversion_ms", heic_total_ms)
 
     return {
         "from": str(msg.get("From", "")),

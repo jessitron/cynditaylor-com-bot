@@ -30,40 +30,43 @@ Goal: one Honeycomb query returns dollars-per-session (or per email, per user) a
 
 We're tracking marginal post-free-tier cost — not the actual AWS bill. Free-tier accounting is a different question.
 
-### Done: SES ✅
+### Done: SES outbound ✅
 
-Per https://aws.amazon.com/ses/pricing/ — both directions are $0.0001/message.
+Per https://aws.amazon.com/ses/pricing/ — $0.0001/message sent.
 
 | Span | Attribute | Value |
 | --- | --- | --- |
-| `execute_tool parse_inbound` | `cost.ses.receipt.qty` | 1 |
-| `execute_tool parse_inbound` | `cost.ses.receipt.price` | 0.0001 |
 | `execute_tool send_reply` | `cost.ses.send.qty` | 1 |
 | `execute_tool send_reply` | `cost.ses.send.price` | 0.0001 |
 
-Constants live in `agent/tools/email_tools.py` (`SES_SEND_PRICE_USD`, `SES_RECEIPT_PRICE_USD`). Verified locally — Phoenix trace `12299e69d2997939859c149b9ba46ac1` (`scripts/agent-fake-roundtrip` run 2026-05-03) carries all four attributes on the right two spans.
+Constant in `agent/tools/email_tools.py` (`SES_SEND_PRICE_USD`).
 
-### Done: SES inbound chunk charge ✅
+**SES inbound costs (per-message receipt + chunk charge) belong to the dispatcher**, not the agent. The dispatcher is the SES integration layer; the agent only reads from S3. Inbound cost telemetry lives in `lambda/invoke_agent` (or should, when added there). The `cost.ses.receipt.*` and `cost.ses.receipt_chunks.*` attrs were briefly stamped on the agent's parse span and have been removed.
 
-SES bills $0.00009 per 256KB chunk of incoming mail on top of the per-message charge. For plain-text emails (~5KB) it's ~10% of inbound; for a 1MB photo it's ~half. Constants live with the per-message ones in `agent/tools/email_tools.py` (`SES_RECEIPT_CHUNK_PRICE_USD`, `SES_RECEIPT_CHUNK_BYTES`).
+### Done: attachment visibility ✅
 
-| Span | Attribute | Value |
-| --- | --- | --- |
-| `execute_tool parse_inbound` | `cost.ses.receipt_chunks.qty` | `ceil(len(raw) / 262144)`, min 1 |
-| `execute_tool parse_inbound` | `cost.ses.receipt_chunks.price` | 0.00009 |
-
-### Next: attachment visibility (lands with the picture feature)
-
-Non-cost observability that goes on the same `execute_tool parse_inbound` span as the chunk charge. Once `parse_inbound` extracts image attachments and writes them into `images/`:
+Non-cost observability on `execute_tool parse_inbound`:
 
 - `email.attachment.count` — total `image/*` MIME parts on the inbound
-- `email.attachment.bytes_total` — sum of decoded sizes
-- `email.attachment.types` — comma-joined content-types (e.g. `image/heic,image/jpeg`)
-- `email.attachment.heic_conversion_ms` — wall time in HEIC→JPG (omit if zero)
+- `email.attachment.bytes_total` — sum of decoded sizes (when count > 0)
+- `email.attachment.types` — comma-joined final content-types (when count > 0)
 
-Per-attachment detail goes on span events keyed by filename, not as parent-span columns — keeps the column set bounded when mom sends 12 photos at once.
+HEIC conversion is its own child span `convert_heic_to_jpg` (one per HEIC) carrying `image.original_filename`, `image.input_bytes`, `image.output_bytes`, `image.target_path`. Wall time is span timing — no separate `heic_conversion_ms` attr. One span per attachment is fine for typical multi-photo emails; if mom ever sends 50 we can revisit.
 
-Mirror `email.attachment.count` and `email.attachment.bytes_total` onto the dispatcher's per-email Honeycomb event in dataset `cyndibot-dispatcher` so a single Honeycomb query can `WHERE email.attachment.count > 0` across both datasets and find every picture-bearing run.
+Verified Phoenix trace `10e00b18f421d939a51c6cf49d6b528d` (later traces will also show the new `convert_heic_to_jpg` child spans).
+
+For "find picture-bearing emails," query the agent dataset directly: `WHERE email.attachment.count > 0`. Cross-dataset joins on `session.id` give you the matching dispatcher events without needing to mirror the count.
+
+### Future: S3 GetObject from parse_inbound
+
+The agent reads the raw MIME from S3 in `parse_inbound`. Real cost (~$0.0004 per 1000 GET + data transfer out, but we're in-region so transfer is free). One GET per email. Tiny, but worth wiring up when we do the rollup so the bill is complete:
+
+```
+cost.s3.get.qty   = 1
+cost.s3.get.price = 0.0000004
+```
+
+Stamp on the parse span. Constant goes in `agent/tools/email_tools.py`. Lowest priority.
 
 ### Next: Bedrock tokens
 
@@ -98,9 +101,8 @@ Lowest priority — do last.
 ### Roll-up query (once all four cost sources exist)
 
 ```
-SUM(cost.ses.receipt.qty * cost.ses.receipt.price)
-  + SUM(cost.ses.receipt_chunks.qty * cost.ses.receipt_chunks.price)
-  + SUM(cost.ses.send.qty * cost.ses.send.price)
+SUM(cost.ses.send.qty * cost.ses.send.price)
+  + SUM(cost.s3.get.qty * cost.s3.get.price)
   + SUM(cost.bedrock.input.qty * cost.bedrock.input.price)
   + SUM(cost.bedrock.output.qty * cost.bedrock.output.price)
   + SUM(cost.agentcore.cpu_seconds.qty * cost.agentcore.cpu_seconds.price)
@@ -108,6 +110,8 @@ SUM(cost.ses.receipt.qty * cost.ses.receipt.price)
   + SUM(cost.lambda.ms.qty * cost.lambda.ms.price)
 GROUP BY session.id
 ```
+
+(Plus `cost.ses.receipt.*` / `cost.ses.receipt_chunks.*` from the dispatcher dataset — joined on `session.id` at query time.)
 
 A Honeycomb derived column per term keeps the dashboard query short.
 
