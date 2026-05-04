@@ -1,40 +1,66 @@
-"""Smoke-test view_site_image_impl on an existing image in the workspace."""
+"""Smoke-test view_site_image_impl end-to-end:
+1. wrap an existing site image into a Strands ToolResult
+2. send the image to Bedrock (Claude Sonnet 4.5) and print its description
+   -- proving the model actually sees what view_site_image returned.
+"""
 
 import sys
-from pathlib import Path
+
+import boto3
 
 from agent.tools.site_tools import WORKSPACE_DIR, view_site_image_impl
 
+REGION = "us-west-2"
+MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+TARGET = "images/breakfast-for-one.jpg"
+
 
 def main() -> int:
-    images_dir = WORKSPACE_DIR / "images"
-    if not images_dir.is_dir():
-        print(f"FAIL: no images/ dir at {images_dir}")
+    target_path = WORKSPACE_DIR / TARGET
+    if not target_path.is_file():
+        print(f"FAIL: {target_path} not in workspace -- run sync_workspace first")
         return 1
 
-    candidates = [
-        p for p in images_dir.iterdir()
-        if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-    ]
-    if not candidates:
-        print(f"FAIL: no supported images under {images_dir}")
-        return 1
-
-    target = max(candidates, key=lambda p: p.stat().st_size)
-    rel = target.relative_to(WORKSPACE_DIR)
-    print(f"viewing: {rel}  (on disk: {target.stat().st_size} bytes)")
-
-    result = view_site_image_impl(str(rel))
+    print(f"viewing: {TARGET}  (on disk: {target_path.stat().st_size} bytes)")
+    result = view_site_image_impl(TARGET)
     assert result["status"] == "success", result
-    content = result["content"]
-    assert any("text" in c for c in content), content
-    image_blocks = [c for c in content if "image" in c]
-    assert len(image_blocks) == 1, content
-    img = image_blocks[0]["image"]
-    assert img["format"] in {"jpeg", "png", "gif", "webp"}, img
-    raw = img["source"]["bytes"]
-    assert isinstance(raw, bytes) and len(raw) > 0, type(raw)
-    print(f"ok: format={img['format']} returned_bytes={len(raw)}")
+    image_blocks = [c for c in result["content"] if "image" in c]
+    assert len(image_blocks) == 1, result
+    image_content = image_blocks[0]
+    raw = image_content["image"]["source"]["bytes"]
+    print(f"wrapped: format={image_content['image']['format']} bytes={len(raw)}")
+
+    print("asking Bedrock to describe it...")
+    bedrock = boto3.client("bedrock-runtime", region_name=REGION)
+    resp = bedrock.converse(
+        modelId=MODEL_ID,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    image_content,
+                    {
+                        "text": (
+                            "This is a painting from a website's gallery. "
+                            "Describe what you see in 2-3 sentences -- subject, "
+                            "colors, mood. This is a smoke test for an image "
+                            "tool; if you can see the image, your description "
+                            "proves it works."
+                        )
+                    },
+                ],
+            }
+        ],
+    )
+
+    text_parts = [
+        c["text"] for c in resp["output"]["message"]["content"] if "text" in c
+    ]
+    description = "\n".join(text_parts).strip()
+    print()
+    print("=== model description ===")
+    print(description)
+    print("=========================")
     return 0
 
 
