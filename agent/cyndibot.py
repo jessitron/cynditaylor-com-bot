@@ -92,11 +92,13 @@ Jessica can also ask you to make changes to the site. You can reply to her with 
 """
 
 
-def build_agent() -> Agent:I
+def build_agent(thread_id: str | None = None) -> Agent:
     model = BedrockModel(model_id=MODEL_ID, region_name=REGION)
+    trace_attributes = {"gen_ai.conversation.id": thread_id} if thread_id else None
     return Agent(
         model=model,
         system_prompt=SYSTEM_PROMPT,
+        trace_attributes=trace_attributes,
         tools=[
             parse_inbound,
             send_reply,

@@ -25,6 +25,9 @@ def invoke(payload, context: RequestContext):
     invocation_id = payload.get("invocation_id", "")
     email_from = payload.get("email_from", "")
     agent = _get_agent(context.session_id, email_from)
+    conversation_id = email_thread_id or context.session_id
+    if conversation_id:
+        agent.trace_attributes["gen_ai.conversation.id"] = conversation_id
     tracer = trace.get_tracer("agent.server")
     with tracer.start_as_current_span("agent.invocation") as span:
         if email_thread_id:

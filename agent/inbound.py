@@ -14,7 +14,8 @@ def main() -> None:
 
     configure_tracing()
     invocation_id = uuid.uuid4().hex
-    agent = build_agent()
+    thread_id = f"local-{invocation_id}"
+    agent = build_agent(thread_id=thread_id)
     tracer = trace.get_tracer("agent.inbound")
     with tracer.start_as_current_span("agent.invocation") as span:
         span.set_attribute("invocation.id", invocation_id)
