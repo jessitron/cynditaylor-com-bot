@@ -161,6 +161,30 @@ print(f"is_langfuse                  = {t.is_langfuse}")                    # ne
 
 Both must be `True` before there's any point shipping a trace.
 
+## Tagging spans with a conversation ID
+
+Honeycomb's AI view groups LLM calls by `gen_ai.conversation.id`. To get that on every Strands-emitted span (agent span, event-loop cycle, tool calls, LLM calls), pass it as `trace_attributes` to the `Agent` constructor:
+
+```python
+agent = Agent(
+    model=model,
+    system_prompt=SYSTEM_PROMPT,
+    trace_attributes={"gen_ai.conversation.id": thread_id},
+    tools=[...],
+)
+```
+
+Strands stores this as `agent.trace_attributes` and forwards it as `custom_trace_attributes=` into every `start_*_span` call its tracer makes (see `strands/agent/agent.py`, `strands/event_loop/event_loop.py`, `strands/tools/executors/_executor.py`). The tracer merges those into the span's attributes — so the conversation ID lands on Strands spans only, not on resource-level attrs and not on any wrapper spans you create yourself.
+
+**Per-request mutation:** if you cache a single `Agent` across requests (e.g. AgentCore Runtime keeps the agent warm), `trace_attributes` set at construction time is stuck on the first request's value. Mutate the dict per-invocation instead:
+
+```python
+agent.trace_attributes["gen_ai.conversation.id"] = conversation_id
+result = agent(prompt)
+```
+
+Use whatever stable identifier groups the conversation — for an email bot, the email thread root Message-ID hash; for a chat UI, the chat session ID. **Use the same ID across retries and follow-ups in the same conversation**; a fresh UUID per invocation defeats the grouping.
+
 ## Why this works (one-paragraph version)
 
 Strands has its own OTel GenAI instrumentation that emits well-shaped `gen_ai.*` attributes following the spec. The spec says message bodies belong on span *events*, which is correct for log-style backends but wrong for column-oriented backends like Honeycomb. The OpenInference Strands processor exists to translate Strands' GenAI shape into Phoenix's OpenInference schema, but it does so by also stuffing leftover attrs into a single JSON blob — bad for any column-oriented UI. Skipping the processor, setting `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental`, and then either tripping the `is_langfuse` heuristic with `LANGFUSE_BASE_URL=langfuse-*` (no collector) or running the OTTL `merge_maps` lift in a collector (see § 4) gets you clean, individual, queryable columns plus messages on spans.
