@@ -20,23 +20,23 @@ Per-thread fixes both:
 
 ## Target behavior
 
-| Scenario | What happens |
-|---|---|
-| Mom sends a fresh email | New thread id → new microVM → fresh agent → clean conversation. |
-| Mom replies in the same thread | Same thread id → same warm microVM → same agent, retains prior context. |
-| Mom sends two unrelated requests in parallel | Two thread ids → two microVMs → no contamination, no serialization. |
-| Forward-and-reply within a thread | Still the same thread id, gets routed to the same warm agent with prior context. |
+| Scenario                                     | What happens                                                                     |
+| -------------------------------------------- | -------------------------------------------------------------------------------- |
+| Mom sends a fresh email                      | New thread id → new microVM → fresh agent → clean conversation.                  |
+| Mom replies in the same thread               | Same thread id → same warm microVM → same agent, retains prior context.          |
+| Mom sends two unrelated requests in parallel | Two thread ids → two microVMs → no contamination, no serialization.              |
+| Forward-and-reply within a thread            | Still the same thread id, gets routed to the same warm agent with prior context. |
 
 The `_get_agent` cache stays as-is — one microVM = one thread, so cache-for-microVM-lifetime = cache-for-thread-lifetime, which is exactly right.
 
 ## The three IDs
 
-| Field | Value | Purpose |
-|---|---|---|
-| `email.from` | sender's address from `From:` header (already present as `email.from`) | "all emails from this person" |
-| `email.thread.id` | `thread-<sha256(thread-root-message-id)>` | "all emails in this conversation" |
-| `invocation.id` | uuid4 per Lambda invocation (today's `event_id`, renamed) | "this specific email" |
-| `session.id` | same value as `email.thread.id` | OTel-conventional dimension; redundant but communicates well in queries |
+| Field             | Value                                                                  | Purpose                                                                 |
+| ----------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `email.from`      | sender's address from `From:` header (already present as `email.from`) | "all emails from this person"                                           |
+| `email.thread.id` | `thread-<sha256(thread-root-message-id)>`                              | "all emails in this conversation"                                       |
+| `invocation.id`   | uuid4 per Lambda invocation (today's `event_id`, renamed)              | "this specific email"                                                   |
+| `session.id`      | same value as `email.thread.id`                                        | OTel-conventional dimension; redundant but communicates well in queries |
 
 `email.thread.id` and `session.id` carrying the same value is deliberate — keeps the OTel-conventional name in place for cross-tool queries, while making the domain meaning explicit.
 
@@ -50,7 +50,7 @@ In priority order, against the email's headers:
 
 Then: strip angle brackets, lowercase, sha256 → `thread-<digest>`.
 
-This is not a fallback chain in the sense the project guidelines warn against — each branch is the *correct* answer for the kind of email it describes. A message with no In-Reply-To/References genuinely is the start of a thread.
+This is not a fallback chain in the sense the project guidelines warn against — each branch is the _correct_ answer for the kind of email it describes. A message with no In-Reply-To/References genuinely is the start of a thread.
 
 ## Verification gate before coding
 
@@ -66,7 +66,7 @@ The dispatcher needs `In-Reply-To` and `References` headers, which are NOT in `m
 1. **Verify `mail.headers` is on the SES Lambda event.** If yes, proceed. If no, decide between rule-config knob and S3 re-read; document the decision here before continuing.
 2. **`lambda/invoke_agent/handler.py`:**
    - Add `_thread_id_from_headers(mail) -> str` implementing JWZ-lite above.
-   - Rename `event_id` → `invocation.id` in the Honeycomb event field. (Internal var name can stay; the *exported attribute* is what matters.)
+   - Rename `event_id` → `invocation.id` in the Honeycomb event field. (Internal var name can stay; the _exported attribute_ is what matters.)
    - Compute `thread_id = _thread_id_from_headers(mail)` and use it as both the Honeycomb event's `email.thread.id` and `session.id`, AND as `runtimeSessionId` in the `invoke_agent_runtime` call.
    - Expand the agent payload from `{"s3_key": ...}` to `{"s3_key": ..., "email_thread_id": ..., "invocation_id": ..., "email_from": ...}`.
    - Add the three IDs to the `logger.info("invoking agent runtime: ...")` line.
@@ -84,18 +84,16 @@ The dispatcher needs `In-Reply-To` and `References` headers, which are NOT in `m
    - `scripts/agentcore-smoke-invoke` — confirm new fields land on the agent's `agent.invocation` span.
    - End-to-end: send mom email A and mom email B as separate threads. Verify two distinct `session.id` / `email.thread.id` values. Then send a reply to A. Verify same `session.id` as A, but new `invocation.id`.
    - End-to-end: confirm conversation-history continuity within a thread (e.g., agent asks for clarification in email A's reply, mom replies, agent's reply references prior context). The trace should show prior tool calls in the second invocation's input messages.
-7. **`notes/TELEMETRY.md`:** update the "session.id on every agent span" section to reflect the new semantic. The Resource-attr-not-SpanProcessor decision still holds; only the *value* changes.
+7. **`notes/TELEMETRY.md`:** update the "session.id on every agent span" section to reflect the new semantic. The Resource-attr-not-SpanProcessor decision still holds; only the _value_ changes.
 8. **`notes/ACTIVE.md`:** update the "Decisions locked in so far" line about session model to reflect the new scheme. Add an end-of-session retro when this slice ships.
 
 ## Risks / things to flag
 
 - **Cold start per new thread.** Negligible for mom's volume (a few emails a day at most). Worth noting if usage shape ever changes.
-- **`_check_session_in_reply.py`** still works as-is (it just sets `obs._SESSION_ID` to a string and checks the footer); no change needed unless we rename the footer label.
-- **The dispatcher's CloudWatch retention.** If we expect to query CloudWatch by thread id, make sure log lines actually include it (task 2 above). Honeycomb is the primary query target, but `aws logs tail` is what we reach for first when something looks broken.
-- **`email.thread.id` and `session.id` having identical values** is intentional. Confirmed acceptable: the redundancy buys cross-tool query clarity (OTel conventions for one, domain-natural name for the other).
+- **The dispatcher's CloudWatch retention.** If we expect to query CloudWatch by thread id, make sure log lines actually include it (task 2 above). Honeycomb is the primary query target.
+- **`email.thread.id` and `session.id` having identical values** is intentional. It expresses that we're scoping session to email thread.
 
 ## Open questions to resolve when work begins
 
-- Reply footer wording (`session:` vs `thread:`).
 - `agent/inbound.py` parity: stamp invocation_id locally, or skip?
-- Whether to also fold `email.from` into the agent's Resource (so it's a column on every span) or keep it as a span-attribute on `agent.invocation` only. Resource means "every span has it but every microVM bakes it in for life" — fine when microVM = thread = one sender, but feels like overreach. Span attr is more honest.
+- Whether to also fold `email.from` into the agent's Resource (so it's a column on every span) -- yes, do it! Anything constant for the whole AgentCore instance is a resource attribute.
