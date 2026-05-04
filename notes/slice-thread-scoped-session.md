@@ -54,12 +54,9 @@ This is not a fallback chain in the sense the project guidelines warn against â€
 
 ## Verification gate before coding
 
-The dispatcher needs `In-Reply-To` and `References` headers, which are NOT in `mail.commonHeaders`. AWS docs say SES Lambda events include `mail.headers` (the full header list) by default, but I want to confirm against a real event before betting on it. Two paths if confirmed false:
+The dispatcher needs `In-Reply-To` and `References` headers, which are NOT in `mail.commonHeaders`. AWS docs say SES Lambda events include `mail.headers` (the full header list) by default, but I want to confirm against a real event before betting on it.
 
-- (a) Configure the receipt rule to include all headers (if there's a knob).
-- (b) Have the dispatcher fetch the raw MIME from S3 and parse headers there. Adds one S3 read of latency to the dispatcher; acceptable.
-
-**First task when work begins:** print `mail.headers` from a real SES Lambda invocation. Maybe extend `scripts/_peek_inbound_headers.py`, or write a one-shot in the Lambda log path.
+**Status: verified 2026-05-04.** Approach: stamped the dispatcher's Honeycomb event with `email.headers.{names,count,in_reply_to,references,message_id}`, then ran `lambda/invoke_agent/scripts/smoke-reply` (a new reply-style smoke that sets In-Reply-To + References on the outgoing pretend-mom email). The dispatcher event came back with both fields populated and `email.headers.names` listing `in-reply-to,references` alongside the rest. SES preserves the threading headers as expected â€” no S3 re-read or receipt-rule knob needed. The header attributes stay on the dispatcher event going forward; cheap and good for debugging.
 
 ## Implementation tasks
 

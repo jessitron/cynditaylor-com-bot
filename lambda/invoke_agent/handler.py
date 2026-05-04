@@ -83,6 +83,22 @@ def _sender_allowed(addr: str) -> bool:
     return domain == AGENT_DOMAIN.lower()
 
 
+def _header_lookup(mail: dict) -> dict[str, str]:
+    """Flatten mail.headers (list of {name, value}) into a case-insensitive dict.
+
+    SES Lambda events include the full header list as `mail.headers` by
+    default; commonHeaders is a curated subset that omits threading headers
+    like In-Reply-To and References, which we need for thread-scoped
+    sessions.
+    """
+    out: dict[str, str] = {}
+    for h in mail.get("headers") or []:
+        name = (h.get("name") or "").lower()
+        if name:
+            out[name] = h.get("value") or ""
+    return out
+
+
 def _sender_from_event(mail: dict) -> str:
     # Prefer the From: header so the session id is stable per real sender.
     # mail.source is the SMTP envelope sender, which gets rewritten to a
@@ -164,6 +180,7 @@ def handler(event, context):
         recipients = receipt.get("recipients") or []
         sender_domain = sender.partition("@")[2].lower()
         matched_recipient = _matched_agent_recipient(recipients)
+        headers = _header_lookup(mail)
 
         fields.update(
             {
@@ -175,6 +192,12 @@ def handler(event, context):
                 "email.to.count": len(recipients),
                 "email.to.matched_agent": matched_recipient is not None,
                 "email.to.matched_address": matched_recipient or "",
+                "email.headers.present": len(headers) > 0,
+                "email.headers.count": len(headers),
+                "email.headers.names": ",".join(sorted(headers.keys())),
+                "email.headers.in_reply_to": headers.get("in-reply-to", ""),
+                "email.headers.references": headers.get("references", ""),
+                "email.headers.message_id": headers.get("message-id", ""),
             }
         )
 

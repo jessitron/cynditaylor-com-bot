@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Send a reply-style pretend-mom email (In-Reply-To + References set) so we
+# can verify the dispatcher's Honeycomb event captures threading headers
+# from mail.headers. Mirrors scripts/smoke but uses the reply sender.
+#
+# Usage: smoke-reply [alias] [parent-message-id]
+#   alias defaults to the first entry of AGENT_USERNAMES from config.env.
+#   parent-message-id defaults to a synthetic id.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source ./config.env
+AGENT_USERNAME="${1:-${AGENT_USERNAMES%%,*}}"
+PARENT_MID="${2:-<parent-test-$(date +%s)@example.com>}"
+export AGENT_DOMAIN AGENT_USERNAME AWS_REGION
+
+LOG_GROUP="/aws/lambda/${LAMBDA_NAME}"
+
+if command -v uv >/dev/null 2>&1; then
+  PY="uv run python"
+else
+  PY="python3"
+fi
+
+START_MS=$(python3 -c "import time; print(int(time.time()*1000))")
+SINCE_ISO=$(python3 -c "from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())")
+
+echo "=== Sending reply-style smoke email to ${AGENT_USERNAME}@${AGENT_DOMAIN} ==="
+echo "    In-Reply-To / References: ${PARENT_MID}"
+MSG_ID=$(${PY} scripts/_send_reply_smoke_email.py "${PARENT_MID}")
+echo "SES MessageId: ${MSG_ID}"
+echo
+
+echo "=== Waiting for dispatcher Lambda to fire (up to 60s) ==="
+EVENT_ID=""
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  sleep 5
+  EVENTS=$(aws logs filter-log-events \
+            --region "${AWS_REGION}" \
+            --log-group-name "${LOG_GROUP}" \
+            --start-time "${START_MS}" \
+            --filter-pattern "honeycomb event sent" \
+            --output json 2>/dev/null || echo '{"events":[]}')
+  EVENT_ID=$(echo "${EVENTS}" \
+    | python3 -c "
+import json, re, sys
+d = json.load(sys.stdin)
+for e in d.get('events', []):
+    msg = e.get('message','')
+    if 'outcome=invoked' in msg:
+        m = re.search(r'event_id=(\S+)', msg)
+        if m:
+            print(m.group(1)); break
+" 2>/dev/null || true)
+  if [[ -n "${EVENT_ID}" ]]; then
+    break
+  fi
+  echo "  not yet (attempt ${i})"
+done
+
+if [[ -z "${EVENT_ID}" ]]; then
+  echo "FAIL: dispatcher did not log an 'outcome=invoked' event within 60s" >&2
+  exit 1
+fi
+
+echo "PASS: dispatcher event_id=${EVENT_ID}"
+echo
+echo "Now query the Honeycomb dispatcher dataset for this event_id and confirm:"
+echo "  - email.headers.in_reply_to is set"
+echo "  - email.headers.references is set"
+echo "  - email.headers.names contains 'in-reply-to,references'"
+echo "  (dataset: ${HONEYCOMB_DATASET}, env: cynditaylor-com-bot, team: modernity)"
