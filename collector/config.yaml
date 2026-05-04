@@ -18,8 +18,8 @@ processors:
   # Lift the gen_ai input/output message attributes that Strands instrumentation
   # records as span events onto the parent span (last-write-wins on collision).
   # The producer SDK can't do this: SpanProcessor.on_end gets a ReadableSpan
-  # whose events are immutable. Other events (e.g. exception events) pass
-  # through untouched and reach Honeycomb as event rows.
+  # whose events are immutable. The original span events still pass through to
+  # Honeycomb unchanged — this only copies their attributes onto the span.
   transform/lift_gen_ai_event_attrs:
     error_mode: ignore
     trace_statements:
@@ -28,14 +28,6 @@ processors:
           - name == "gen_ai.client.inference.operation.details"
         statements:
           - merge_maps(span.attributes, attributes, "upsert")
-
-  # Drop the gen_ai inference-details events now that their attrs live on the
-  # span. Without this they'd be duration_ms=0 noise rows in Honeycomb.
-  filter/drop_lifted_gen_ai_events:
-    error_mode: ignore
-    traces:
-      spanevent:
-        - name == "gen_ai.client.inference.operation.details"
 
   # Boswell leaves a mark on every span he processes. Lets you reverse-lookup
   # which collector deployment, and which Lambda invocation, touched a span.
@@ -72,7 +64,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [transform/lift_gen_ai_event_attrs, filter/drop_lifted_gen_ai_events, attributes/boswell]
+      processors: [transform/lift_gen_ai_event_attrs, attributes/boswell]
       exporters: [otlphttp/honeycomb]
   telemetry:
     logs:

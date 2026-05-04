@@ -66,7 +66,7 @@ def main() -> None:
     print("export succeeded. In Honeycomb (service=collector-smoke), expect:")
     print("  - one span 'collector-smoke-test'")
     print("  - span attrs include smoke.lifted_attr, smoke.marker")
-    print("  - NO separate row with name='gen_ai.client.inference.operation.details' (filter dropped it)")
+    print("  - a span event row with name='gen_ai.client.inference.operation.details' (events pass through)")
 
 
 if __name__ == "__main__":
