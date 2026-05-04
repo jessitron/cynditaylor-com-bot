@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Resend the SES verification email to an address that was already registered
+# as an identity. Uses the v1 SES API, which (unlike sesv2 create-email-identity)
+# is idempotent and triggers a fresh verification email each time.
+# SES verification links expire after 24 hours.
+set -euo pipefail
+
+REGION="us-west-2"
+EMAIL="${1:-}"
+
+if [[ -z "${EMAIL}" ]]; then
+  echo "usage: $0 <email-address>" >&2
+  exit 2
+fi
+
+echo "Resending verification email to ${EMAIL} in ${REGION}..."
+aws ses verify-email-identity \
+  --region "${REGION}" \
+  --email-address "${EMAIL}"
+
+echo
+echo "A new verification email is on its way to ${EMAIL}."
+echo "The link expires in 24 hours. Tell the recipient to check spam/junk."
+echo "After they click, confirm with:"
+echo "  scripts/ses-list-verified"
