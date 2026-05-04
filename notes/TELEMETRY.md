@@ -7,7 +7,7 @@ Tracing/observability work. Agent feature pipeline lives in `notes/ACTIVE.md`.
 - **Local: Arize Phoenix** — `http://localhost:6006/v1/traces` (docker, started by `./run`). Project `cynditaylor-com-bot`.
 - **Cloud: Honeycomb** — team `modernity`, env `cynditaylor-com-bot`. Producer → Boswell collector → Honeycomb.
 - `.env` (gitignored) holds all OTel vars locally.
-- **After any run that emits traces, report the trace URL.** Locally: `scripts/check-last-span` / `scripts/check-last-trace`. Cloud: surface the Honeycomb trace ID from AgentCore output.
+- **After any run that emits traces, report the trace URL.** Locally: query the Phoenix MCP (`mcp__phoenix__list-traces`, `mcp__phoenix__get-trace`) and build `http://localhost:6006/projects/{projectId}/traces/{traceId}`. Cloud: surface the Honeycomb trace ID from AgentCore output.
 
 ## Current state
 

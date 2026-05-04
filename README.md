@@ -122,12 +122,9 @@ cp .env.example .env
 
 # Smoke-test the Strands agent against Bedrock
 ./scripts/hello
-
-# Check that traces are landing in Phoenix
-./scripts/check-last-trace
 ```
 
-Phoenix UI: http://localhost:6006.
+Phoenix UI: http://localhost:6006. Inspect traces via the Phoenix MCP (`mcp__phoenix__list-traces`, `mcp__phoenix__get-trace`).
 
 ### SES plumbing (one-time)
 
