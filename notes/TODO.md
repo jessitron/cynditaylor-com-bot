@@ -5,3 +5,4 @@
 - make replies look nicer, like be 'from' whoever I sent it to, and continue the subject line
 - the agent doesn't need called until after the workspace is synced and the email retrieved.
 - have the commit add the thread ID and email content
+- its only write command is the whole file. That seems bad
