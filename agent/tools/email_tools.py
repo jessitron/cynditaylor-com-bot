@@ -12,6 +12,7 @@ from opentelemetry import trace
 from PIL import Image
 from strands import tool
 
+from agent.observability import get_session_id
 from agent.tools.site_tools import WORKSPACE_DIR
 
 pillow_heif.register_heif_opener()
@@ -164,6 +165,8 @@ def send_reply_impl(
         reply["In-Reply-To"] = in_reply_to
         refs = f"{references} {in_reply_to}".strip() if references else in_reply_to
         reply["References"] = refs
+    session_id = get_session_id() or "(none — tracing not configured with a session id)"
+    body_text = f"{body_text}\n\n--\nsession: {session_id}"
     reply.set_content(body_text)
 
     ses = boto3.client("sesv2", region_name=SES_REGION)
