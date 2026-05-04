@@ -5,7 +5,7 @@
 - **AWS account:** jessitron-sandbox (`414852377253`), region `us-west-2`.
 - **Model:** Claude Sonnet 4.5 via Bedrock inference profile `us.anthropic.claude-sonnet-4-5-20250929-v1:0`. Must use inference-profile IDs, not bare model IDs.
 - **Repo strategy:** clone `cynditaylor-com` into AgentCore session storage at `/mnt/workspace/cynditaylor-com`, commit via shelled `git`. Reset to `origin/main` at start of each invoke.
-- **Session model:** one AgentCore `runtimeSessionId` per mom's email address. 14-day idle TTL is plenty.
+- **Session model:** one AgentCore `runtimeSessionId` per mom's email address. 14-day idle TTL is plenty. *(Under revision — see [Slice: thread-scoped session id](slice-thread-scoped-session.md). Repointing at email thread to fix conversation-history leakage between unrelated emails and to make `session.id` mean "this conversation" instead of "this person".)*
 - **Conversation memory:** no new store. Inbound SES message (landing in S3) + SES sent-log + git log on the site repo are authoritative. Strands `FileSessionManager` in session storage is convenience, not source of truth.
 - **Observability:** OTel → Arize Phoenix (self-hosted locally, `http://localhost:6006/v1/traces`). Honeycomb may come later.
 - **Build tooling:** `uv`.
@@ -180,6 +180,14 @@ Plan:
 ### Later iteration: vision pass
 
 Once v1 is in, pass image bytes back to the model as multimodal content blocks so Sonnet can actually look at the photos. Wins: meaningful alt text, layout decisions (portrait vs. landscape for `gallery.html`), catching sideways photos. Cost: ~1.5K input tokens per phone-photo per Bedrock turn. Mechanism TBD — likely have `parse_inbound`'s tool result include `ImageContent` blocks alongside the JSON metadata, so the agent sees them on the next turn without an extra round trip; verify Strands surfaces multimodal tool results to Bedrock the way we think before committing. Fallback: a small `view_site_image(path)` tool that returns image content on demand.
+
+## Slice: thread-scoped session id (planned)
+
+Repoint `runtimeSessionId` / `session.id` from per-sender to per-email-thread, and add `email.from` + `email.thread.id` + `invocation.id` as first-class queryable dimensions on the dispatcher event, CloudWatch logs, and the agent's root span.
+
+Full plan, motivation (current bug: Strands `Agent` conversation history leaks across unrelated emails because the global `_agent` cache outlives any single request), thread-id derivation algorithm, implementation tasks, and verification: **[notes/slice-thread-scoped-session.md](slice-thread-scoped-session.md)**.
+
+First task when work begins: confirm `mail.headers` is on the SES Lambda invocation event (we need `In-Reply-To` and `References`, neither of which is in `mail.commonHeaders`).
 
 ## Still pending
 
