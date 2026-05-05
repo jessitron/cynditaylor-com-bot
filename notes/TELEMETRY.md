@@ -68,23 +68,24 @@ cost.s3.get.price = 0.0000004
 
 Stamp on the parse span. Constant goes in `agent/tools/email_tools.py`. Lowest priority.
 
-### Next: Bedrock tokens
+### Done: Bedrock tokens ✅
 
-Token counts are already on `chat` spans as `gen_ai.usage.input_tokens` / `output_tokens`, and the model is on `gen_ai.request.model`. Need a model→price table:
+Producer-side. `agent/pricing.py` holds the model→price table (per-token, not per-million); `BedrockCostStampingProcessor` in `agent/observability.py` runs as a SpanProcessor before the BatchSpanProcessor and mutates `span._attributes` in `on_end` for spans named `chat`. Lands cost attrs in both Phoenix and Honeycomb.
 
-- Sonnet 4.5: $3 per 1M input tokens, $15 per 1M output tokens
-- Opus 4.7: $15 per 1M input tokens, $75 per 1M output tokens
+Four buckets, all independent (Bedrock returns `inputTokens`, `cacheReadInputTokens`, `cacheWriteInputTokens`, `outputTokens` separately — `inputTokens` does *not* include cache tokens, so they multiply against three different prices):
 
-Pattern:
+| Token attribute (set by Strands) | Cost attrs stamped |
+| --- | --- |
+| `gen_ai.usage.input_tokens` | `cost.bedrock.input.{qty,price}` |
+| `gen_ai.usage.output_tokens` | `cost.bedrock.output.{qty,price}` |
+| `gen_ai.usage.cache_read_input_tokens` | `cost.bedrock.cache_read.{qty,price}` |
+| `gen_ai.usage.cache_write_input_tokens` | `cost.bedrock.cache_write.{qty,price}` |
 
-```
-cost.bedrock.input.qty   = input_tokens
-cost.bedrock.input.price = price_in_per_token   # per token, not per million
-cost.bedrock.output.qty  = output_tokens
-cost.bedrock.output.price = price_out_per_token
-```
+Cache prices assume the 5-minute TTL (the Bedrock default). Cache attrs are only stamped when Strands stamped the matching token attr — no zero-pad. Verified Phoenix trace `13a848fada1ab330840765a3e2ff2970` (no cache hits this run, so input/output only).
 
-Open question: producer-side stamp (Strands span-end hook or wrap `BedrockInstrumentor`) vs. collector-side enrichment in Boswell (one place that knows all prices, no producer redeploys when prices change). Lean toward collector-side since Boswell already does attribute manipulation — but means the cost data only exists in the cloud path, not local Phoenix. Decide before writing code.
+**Why mutate `_attributes` directly?** `Span.set_attribute` no-ops after `_end_time` is set, but `BoundedAttributes` is created with `immutable=False` and stays mutable for the span's lifetime. The same `_attributes` dict is shared between the live `Span` and the `ReadableSpan` passed to each on_end, so writes from our processor land in the version BatchSpanProcessor exports. Standard pattern; slightly hacky.
+
+**Why producer-side over collector-side:** keeps the qty/price pattern uniform with `SES_SEND_PRICE_USD`, and local Phoenix sees the same data as Honeycomb. AgentCore/Lambda costs will *have* to be collector-side later (the agent doesn't know its own runtime billing), so we'll be split eventually.
 
 ### Next: AgentCore runtime
 
