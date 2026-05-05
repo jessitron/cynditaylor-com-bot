@@ -83,6 +83,19 @@ Four buckets, all independent (Bedrock returns `inputTokens`, `cacheReadInputTok
 
 Cache prices assume the 5-minute TTL (the Bedrock default). Cache attrs are only stamped when Strands stamped the matching token attr — no zero-pad. Verified Phoenix trace `13a848fada1ab330840765a3e2ff2970` (no cache hits this run, so input/output only).
 
+**How cache buckets compose on a single call.** Bedrock's `Converse` `usage` returns four independent counts:
+
+- `inputTokens` — *uncached* input only. Cache reads do NOT count here.
+- `cacheReadInputTokens` — tokens served from a previously-written cache entry.
+- `cacheWriteInputTokens` — tokens just written this call.
+- `outputTokens` — completion.
+
+The three input-side counts never overlap; they sum to the actual prompt size. So a 12k-token prompt where 11k hit cache + 1k are new shows up as `inputTokens=1000, cacheReadInputTokens=11000, cacheWriteInputTokens=0`. Three different prices apply: $3/MTok uncached, $0.30/MTok cache read (10× cheaper, the whole point), $3.75/MTok cache write — the rollup is `qty * price` summed across all four buckets and you see the cache discount in dollars without doing subtraction.
+
+Strands only stamps a `gen_ai.usage.cache_*` attr when Bedrock returned that field (so `qty=0` is possible but absence is also possible). Our processor's `if qty is None: continue` handles the absence case; `qty=0` still stamps and contributes 0 to the sum, which is correct.
+
+Not yet exercised on a real cache-hit run — Strands doesn't enable Bedrock prompt caching in our config today. Code path is symmetric with input/output (verified), should just work, but worth a smoke when caching is turned on.
+
 **Why mutate `_attributes` directly?** `Span.set_attribute` no-ops after `_end_time` is set, but `BoundedAttributes` is created with `immutable=False` and stays mutable for the span's lifetime. The same `_attributes` dict is shared between the live `Span` and the `ReadableSpan` passed to each on_end, so writes from our processor land in the version BatchSpanProcessor exports. Standard pattern; slightly hacky.
 
 **Why producer-side over collector-side:** keeps the qty/price pattern uniform with `SES_SEND_PRICE_USD`, and local Phoenix sees the same data as Honeycomb. AgentCore/Lambda costs will *have* to be collector-side later (the agent doesn't know its own runtime billing), so we'll be split eventually.
@@ -106,6 +119,8 @@ SUM(cost.ses.send.qty * cost.ses.send.price)
   + SUM(cost.s3.get.qty * cost.s3.get.price)
   + SUM(cost.bedrock.input.qty * cost.bedrock.input.price)
   + SUM(cost.bedrock.output.qty * cost.bedrock.output.price)
+  + SUM(cost.bedrock.cache_read.qty * cost.bedrock.cache_read.price)
+  + SUM(cost.bedrock.cache_write.qty * cost.bedrock.cache_write.price)
   + SUM(cost.agentcore.cpu_seconds.qty * cost.agentcore.cpu_seconds.price)
   + SUM(cost.agentcore.gb_seconds.qty * cost.agentcore.gb_seconds.price)
   + SUM(cost.lambda.ms.qty * cost.lambda.ms.price)
