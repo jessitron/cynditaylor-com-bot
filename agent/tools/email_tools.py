@@ -13,6 +13,7 @@ from PIL import Image
 from strands import tool
 
 from agent.observability import get_session_id
+from agent.pricing import SES_SEND_USD
 from agent.tools.site_tools import WORKSPACE_DIR, get_last_pushed_sha
 
 pillow_heif.register_heif_opener()
@@ -20,11 +21,6 @@ pillow_heif.register_heif_opener()
 INBOUND_BUCKET = "cyndibot-incoming-emails"
 SES_REGION = "us-west-2"
 REPLY_FROM = "Cyndibot <bot@cyndibot.jessitron.honeydemo.io>"
-
-# https://aws.amazon.com/ses/pricing/ — marginal rate after free tier.
-# Inbound costs (receipt + chunk-charge) are the dispatcher's responsibility;
-# see lambda/invoke_agent.
-SES_SEND_PRICE_USD = 0.0001
 
 _tracer = trace.get_tracer(__name__)
 _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
@@ -177,7 +173,7 @@ def send_reply_impl(
 
     span = trace.get_current_span()
     span.set_attribute("cost.ses.send.qty", 1)
-    span.set_attribute("cost.ses.send.price", SES_SEND_PRICE_USD)
+    span.set_attribute("cost.ses.send.price", SES_SEND_USD)
 
     # SES replaces the Message-ID header on raw send. The delivered message's
     # Message-ID is <{MessageId}@us-west-2.amazonses.com>; that's what will
