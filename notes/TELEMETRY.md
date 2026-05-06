@@ -39,7 +39,7 @@ Per https://aws.amazon.com/ses/pricing/ — $0.0001/message sent.
 | `execute_tool send_reply` | `cost.ses.send.qty` | 1 |
 | `execute_tool send_reply` | `cost.ses.send.price` | 0.0001 |
 
-Constant in `agent/tools/email_tools.py` (`SES_SEND_PRICE_USD`).
+Constant `SES_SEND_USD` in `agent/pricing.py`.
 
 **SES inbound costs (per-message receipt + chunk charge) belong to the dispatcher**, not the agent. The dispatcher is the SES integration layer; the agent only reads from S3. Inbound cost telemetry lives in `lambda/invoke_agent` (or should, when added there). The `cost.ses.receipt.*` and `cost.ses.receipt_chunks.*` attrs were briefly stamped on the agent's parse span and have been removed.
 
@@ -98,11 +98,36 @@ Not yet exercised on a real cache-hit run — Strands doesn't enable Bedrock pro
 
 **Why mutate `_attributes` directly?** `Span.set_attribute` no-ops after `_end_time` is set, but `BoundedAttributes` is created with `immutable=False` and stays mutable for the span's lifetime. The same `_attributes` dict is shared between the live `Span` and the `ReadableSpan` passed to each on_end, so writes from our processor land in the version BatchSpanProcessor exports. Standard pattern; slightly hacky.
 
-**Why producer-side over collector-side:** keeps the qty/price pattern uniform with `SES_SEND_PRICE_USD`, and local Phoenix sees the same data as Honeycomb. AgentCore/Lambda costs will *have* to be collector-side later (the agent doesn't know its own runtime billing), so we'll be split eventually.
+**Why producer-side over collector-side:** keeps the qty/price pattern uniform with `SES_SEND_USD`, and local Phoenix sees the same data as Honeycomb. Lambda costs will likely be collector-side later (the producer doesn't see its own runtime billing).
 
-### Next: AgentCore runtime
+### Done: AgentCore runtime ✅
 
-Billed on microVM time × configured vCPU/memory. `agent.invocation` span has wall time; need configured vCPU/RAM from the runtime config. Open: does AgentCore expose actual-vs-configured CPU/memory anywhere (CloudWatch namespace, response headers)? If only configured is exposed, our number is an upper bound — call it out in the attribute name or accept the imprecision.
+Billed at $0.0895/vCPU-hour and $0.00945/GB-hour ([pricing](https://aws.amazon.com/bedrock/agentcore/pricing/)). `create-agent-runtime` has no vCPU/memory params — AgentCore auto-sizes the microVM and bills actuals. `AWS/Bedrock-AgentCore` CloudWatch metrics (`CPUUsed-vCPUHours`, `MemoryUsed-GBHours`) report actuals but only carry the runtime ARN as a dimension — no `session.id` or trace ID, so they can't be joined to a trace.
+
+Instead: `AgentCoreCostStampingProcessor` in `agent/observability.py` snapshots `resource.getrusage(RUSAGE_SELF)` in `on_start` for spans named `agent.invocation`, computes the delta in `on_end`, and stamps four attrs:
+
+| Attribute | Source |
+| --- | --- |
+| `cost.agentcore.cpu.seconds` | delta of `ru_utime + ru_stime` |
+| `cost.agentcore.cpu.usd_per_hour` | constant 0.0895 |
+| `cost.agentcore.memory.peak_rss_bytes` | `ru_maxrss` at on_end (×1024 on Linux, ×1 on macOS) |
+| `cost.agentcore.memory.usd_per_gb_hour` | constant 0.00945 |
+
+Honeycomb derived column for the dollar amount:
+
+```
+cpu.seconds / 3600 * cpu.usd_per_hour
++ peak_rss_bytes / 1e9 * (duration_ms / 3_600_000) * memory.usd_per_gb_hour
+```
+
+Verified Phoenix trace `2a8948fb779d9ed08cdc71e8bdbaef62` (CPU 0.65s, peak RSS 119 MB, ~17.5s wall → ~$2.2e-5 per email).
+
+**Caveats kept for honesty:**
+
+- **Process-RSS, not microVM allocation.** `ru_maxrss` is what the Python process holds; AgentCore bills the whole microVM (Python + sidecars + kernel buffers). We're probably 70–90% of the truth, biased low. Naming says `peak_rss_bytes` not `gb_allocated` so this stays visible.
+- **`ru_maxrss` is a process high-water mark.** On a warm microVM serving many invocations, the first one establishes the baseline and later ones inherit it. Per-invocation memory cost is overstated for early invocations and understated when memory grew on a prior invocation. Roughly matches AgentCore's "allocated GB-hours" billing model so it's the right shape, just not exact.
+- **CPU is accurately per-invocation** (it's a delta).
+- **Smoke** in `scripts/_smoke_agentcore_cost_processor.py` exercises the processor without an exporter.
 
 ### Next: Boswell Lambda
 
@@ -121,8 +146,8 @@ SUM(cost.ses.send.qty * cost.ses.send.price)
   + SUM(cost.bedrock.output.qty * cost.bedrock.output.price)
   + SUM(cost.bedrock.cache_read.qty * cost.bedrock.cache_read.price)
   + SUM(cost.bedrock.cache_write.qty * cost.bedrock.cache_write.price)
-  + SUM(cost.agentcore.cpu_seconds.qty * cost.agentcore.cpu_seconds.price)
-  + SUM(cost.agentcore.gb_seconds.qty * cost.agentcore.gb_seconds.price)
+  + SUM(cost.agentcore.cpu.seconds) / 3600 * AVG(cost.agentcore.cpu.usd_per_hour)
+  + SUM(cost.agentcore.memory.peak_rss_bytes / 1e9 * duration_ms / 3_600_000) * AVG(cost.agentcore.memory.usd_per_gb_hour)
   + SUM(cost.lambda.ms.qty * cost.lambda.ms.price)
 GROUP BY session.id
 ```
@@ -133,5 +158,8 @@ A Honeycomb derived column per term keeps the dashboard query short.
 
 ### Open questions still to resolve
 
-- **Where does the price table live?** Currently inline constants in the relevant module. Fine for one service; gets messy across four. Candidates: (a) a single `agent/pricing.py`, (b) collector-side stamping for the cloud path, (c) Honeycomb derived columns. Decide when we add Bedrock — that's the second service and forces the question.
-- **Skill writeup.** Once two cost sources land with the qty/price pattern, capture as `notes/skills/cost-telemetry/` so the convention travels.
+- **Skill writeup.** With three cost sources landed (SES, Bedrock, AgentCore) under the qty/price pattern, capture as `notes/skills/cost-telemetry/` so the convention travels. Trigger after Boswell Lambda lands so the skill covers both producer-side and collector-side stamping.
+
+### Resolved: price table location
+
+Lives in `agent/pricing.py`. Bedrock token prices, `SES_SEND_USD`, `AGENTCORE_CPU_USD_PER_HOUR`, and `AGENTCORE_MEMORY_USD_PER_GB_HOUR` all import from there. Refresh by editing one file, no rewrite of historical telemetry.
