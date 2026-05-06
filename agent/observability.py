@@ -1,4 +1,6 @@
 import os
+import resource
+import sys
 
 from openinference.instrumentation.bedrock import BedrockInstrumentor
 from opentelemetry import trace
@@ -7,7 +9,11 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-from agent.pricing import lookup as lookup_price
+from agent.pricing import (
+    AGENTCORE_CPU_USD_PER_HOUR,
+    AGENTCORE_MEMORY_USD_PER_GB_HOUR,
+    lookup as lookup_price,
+)
 
 
 _SESSION_ID: str | None = None
@@ -72,6 +78,57 @@ class BedrockCostStampingProcessor(SpanProcessor):
         return True
 
 
+class AgentCoreCostStampingProcessor(SpanProcessor):
+    """Stamps cost.agentcore.* attrs on agent.invocation spans.
+
+    CPU is the delta of (utime+stime) between on_start and on_end — accurate
+    per-invocation. Memory is ru_maxrss at on_end — the process high-water
+    mark. ru_maxrss is monotonic per-process, so on a warm microVM serving
+    many invocations, the first invocation establishes the baseline and
+    later ones inherit it. That overcounts per-invocation memory cost
+    slightly but matches the AgentCore billing model (allocated GB-hours,
+    not used GB-hours). ru_maxrss is KB on Linux (where AgentCore runs),
+    bytes on macOS — we detect at import.
+    """
+
+    _RU_MAXRSS_TO_BYTES = 1 if sys.platform == "darwin" else 1024
+
+    _start_cpu: dict[int, float]
+
+    def __init__(self) -> None:
+        self._start_cpu = {}
+
+    def on_start(self, span, parent_context=None):
+        if span.name != "agent.invocation":
+            return
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        self._start_cpu[span.context.span_id] = usage.ru_utime + usage.ru_stime
+
+    def on_end(self, span: ReadableSpan) -> None:
+        if span.name != "agent.invocation":
+            return
+        start = self._start_cpu.pop(span.context.span_id, None)
+        if start is None:
+            return
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        cpu_seconds = (usage.ru_utime + usage.ru_stime) - start
+        peak_rss_bytes = usage.ru_maxrss * self._RU_MAXRSS_TO_BYTES
+        new_attrs = {
+            "cost.agentcore.cpu.seconds": cpu_seconds,
+            "cost.agentcore.cpu.usd_per_hour": AGENTCORE_CPU_USD_PER_HOUR,
+            "cost.agentcore.memory.peak_rss_bytes": peak_rss_bytes,
+            "cost.agentcore.memory.usd_per_gb_hour": AGENTCORE_MEMORY_USD_PER_GB_HOUR,
+        }
+        if hasattr(span, "_attributes") and span._attributes is not None:
+            span._attributes.update(new_attrs)
+
+    def shutdown(self) -> None:
+        return
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return True
+
+
 def configure_tracing(
     session_id: str | None = None,
     email_from: str | None = None,
@@ -87,6 +144,7 @@ def configure_tracing(
     resource = Resource.create(resource_attrs)
     provider = TracerProvider(resource=resource)
     provider.add_span_processor(BedrockCostStampingProcessor())
+    provider.add_span_processor(AgentCoreCostStampingProcessor())
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 
     trace.set_tracer_provider(provider)
