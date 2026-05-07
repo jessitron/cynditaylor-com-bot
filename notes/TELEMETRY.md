@@ -156,6 +156,37 @@ GROUP BY session.id
 
 A Honeycomb derived column per term keeps the dashboard query short.
 
+### Derived column: `cost.usd`
+
+One per-span dollar contribution; `SUM` it across a session/trace at query time. Define in **Environment settings → Schema → Derived columns** for env `cynditaylor-com-bot`. `COALESCE(..., 0)` keeps the column non-null on every span so `SUM` doesn't drop rows. The memory-term divisor `3.6e15` = `1e9` (bytes→GB) × `3.6e6` (ms→hours).
+
+```
+ADD(
+  MUL(COALESCE($cost.ses.send.qty, 0), COALESCE($cost.ses.send.price, 0)),
+  MUL(COALESCE($cost.bedrock.input.qty, 0), COALESCE($cost.bedrock.input.price, 0)),
+  MUL(COALESCE($cost.bedrock.output.qty, 0), COALESCE($cost.bedrock.output.price, 0)),
+  MUL(COALESCE($cost.bedrock.cache_read.qty, 0), COALESCE($cost.bedrock.cache_read.price, 0)),
+  MUL(COALESCE($cost.bedrock.cache_write.qty, 0), COALESCE($cost.bedrock.cache_write.price, 0)),
+  DIV(
+    MUL(COALESCE($cost.agentcore.cpu.seconds, 0), COALESCE($cost.agentcore.cpu.usd_per_hour, 0)),
+    3600
+  ),
+  DIV(
+    MUL(
+      MUL(COALESCE($cost.agentcore.memory.peak_rss_bytes, 0), COALESCE($cost.agentcore.memory.usd_per_gb_hour, 0)),
+      $duration_ms
+    ),
+    3600000000000
+  )
+)
+```
+
+When new cost terms land (S3 GET, Boswell Lambda), edit this column to add them.
+
+### Query: dollars per session
+
+`VISUALIZE SUM($cost.usd) GROUP BY session.id ORDER BY SUM($cost.usd) DESC` — add `WHERE collector.boswell exists` to exclude legacy traffic. Run against the agent dataset; cross-dataset joins on `session.id` pull in the dispatcher's SES inbound costs.
+
 ### Open questions still to resolve
 
 - **Skill writeup.** With three cost sources landed (SES, Bedrock, AgentCore) under the qty/price pattern, capture as `notes/skills/cost-telemetry/` so the convention travels. Trigger after Boswell Lambda lands so the skill covers both producer-side and collector-side stamping.
