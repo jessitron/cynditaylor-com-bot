@@ -6,7 +6,7 @@ PHOENIX_IMAGE="arizephoenix/phoenix:latest"
 
 start_phoenix() {
   if docker ps --format '{{.Names}}' | grep -q "^${PHOENIX_CONTAINER}$"; then
-    echo "Phoenix already running -> http://localhost:6006"
+    echo "Phoenix already running -> http://localhost:16006"
     return
   fi
 
@@ -17,14 +17,15 @@ start_phoenix() {
     echo "Pulling and starting Phoenix..."
     docker run -d \
       --name "${PHOENIX_CONTAINER}" \
-      -p 6006:6006 \
-      -p 4317:4317 \
+      -p 16006:6006 \
+      -p 16317:4317 \
+      -p 16318:4318 \
       "${PHOENIX_IMAGE}" >/dev/null
   fi
 
-  echo "Phoenix UI  -> http://localhost:6006"
-  echo "OTLP HTTP   -> http://localhost:6006/v1/traces"
-  echo "OTLP gRPC   -> http://localhost:4317"
+  echo "Phoenix UI  -> http://localhost:16006"
+  echo "OTLP HTTP   -> http://localhost:16318/v1/traces"
+  echo "OTLP gRPC   -> http://localhost:16317"
 }
 
 start_phoenix

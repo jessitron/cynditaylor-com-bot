@@ -54,6 +54,6 @@ exec docker run --rm \
   -e AWS_REGION=us-west-2 \
   -e AWS_DEFAULT_REGION=us-west-2 \
   -e AWS_PROFILE="${AWS_PROFILE:-sandbox}" \
-  -e OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://host.docker.internal:6006/v1/traces \
-  -e OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:6006 \
+  -e OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://host.docker.internal:16318/v1/traces \
+  -e OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:16318 \
   "${IMAGE}"

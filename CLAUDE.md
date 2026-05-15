@@ -55,8 +55,8 @@ See README.md for the full architecture and the rationale in "Key decisions" (St
 
 Tracked as a separate line of work in **`notes/TELEMETRY.md`** — current shape, what's done, what's next. Two load-bearing rules to repeat here:
 
-- **After any test run that emits traces, report the trace URL** so Jessitron can click through. Locally: query the Phoenix MCP (`mcp__phoenix__list-traces`, `mcp__phoenix__get-trace`) and surface a URL of the form `http://localhost:6006/projects/{projectId}/traces/{traceId}`. For cloud runs, surface the Honeycomb trace ID from the AgentCore invoke output.
-- Phoenix runs locally (`http://localhost:6006/v1/traces`, started by `./run`); Honeycomb is the cloud target (team `modernity`, env `cynditaylor-com-bot`). All OTel env vars live in the gitignored `.env`.
+- **After any test run that emits traces, report the trace URL** so Jessitron can click through. Locally: query the Phoenix MCP (`mcp__phoenix__list-traces`, `mcp__phoenix__get-trace`) and surface a URL of the form `http://localhost:16006/projects/{projectId}/traces/{traceId}`. For cloud runs, surface the Honeycomb trace ID from the AgentCore invoke output.
+- Phoenix runs locally (`http://localhost:16318/v1/traces`, started by `./run`); Honeycomb is the cloud target (team `modernity`, env `cynditaylor-com-bot`). All OTel env vars live in the gitignored `.env`.
 
 There's also `collector/` — an OTel collector deployed as a Lambda ("Boswell") that post-processes traces between AgentCore and Honeycomb. See `collector/README.md`.
 

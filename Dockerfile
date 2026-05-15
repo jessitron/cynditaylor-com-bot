@@ -18,7 +18,7 @@ RUN chmod +x /usr/local/bin/container-entrypoint
 ENV PATH="/app/.venv/bin:${PATH}"
 ENV PYTHONUNBUFFERED=1
 ENV CYNDIBOT_WORKSPACE=/mnt/workspace/cynditaylor-com
-ENV OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://host.docker.internal:6006/v1/traces
+ENV OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://host.docker.internal:16318/v1/traces
 ENV OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental
 # Strands' tracer puts gen_ai.{input,output}.messages on span events, and only
 # also copies them onto span attributes when it detects Langfuse via a

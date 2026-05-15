@@ -98,7 +98,7 @@ GITHUB_BRANCH=main
 
 # OpenTelemetry → Phoenix
 OTEL_SERVICE_NAME=cynditaylor-com-bot
-OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:6006/v1/traces
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:16318/v1/traces
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 ```
 
@@ -124,7 +124,7 @@ cp .env.example .env
 ./scripts/hello
 ```
 
-Phoenix UI: http://localhost:6006. Inspect traces via the Phoenix MCP (`mcp__phoenix__list-traces`, `mcp__phoenix__get-trace`).
+Phoenix UI: http://localhost:16006. Inspect traces via the Phoenix MCP (`mcp__phoenix__list-traces`, `mcp__phoenix__get-trace`).
 
 ### SES plumbing (one-time)
 
@@ -147,7 +147,7 @@ Traces are instrumented via `openinference-instrumentation-bedrock` and `openinf
 - The commit that was pushed
 - The SMTP send of the reply
 
-View traces at http://localhost:6006.
+View traces at http://localhost:16006.
 
 ## Key decisions
 

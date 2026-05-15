@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PHOENIX_CONTAINER="cynditaylor-phoenix"
-PHOENIX_URL="http://localhost:6006"
+PHOENIX_URL="http://localhost:16006"
 
 if ! docker ps --format '{{.Names}}' | grep -q "^${PHOENIX_CONTAINER}$"; then
   echo "FAIL: container '${PHOENIX_CONTAINER}' is not running"
