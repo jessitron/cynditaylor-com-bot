@@ -1,6 +1,7 @@
 from strands import Agent
 from strands.models import BedrockModel
 
+from agent.image_subagent import edit_images
 from agent.tools.email_tools import parse_inbound, send_reply
 from agent.tools.site_tools import (
     commit_site_changes,
@@ -47,6 +48,13 @@ You will be given an S3 key pointing at a raw email. Workflow:
      you want to keep, plan where to reference them in HTML
      (gallery.html is the usual home; pages can also embed them
      directly).
+
+     If an image is sideways/upside-down, or its long edge is much
+     larger than 1600px (phone photos are commonly ~4000px), call
+     edit_images with a plain-English instruction naming the file(s)
+     and what to do. The subagent rotates and resizes; it does not
+     edit HTML. After it returns, the image at the same path now
+     reflects the change.
 
   5. Use list_site_files / read_site_file to find or understand the
      file(s) you need. Prefer reading before writing so you preserve
@@ -108,6 +116,7 @@ def build_agent(thread_id: str | None = None) -> Agent:
             write_site_file,
             delete_site_file,
             view_site_image,
+            edit_images,
             commit_site_changes,
             push_site_changes,
         ],
