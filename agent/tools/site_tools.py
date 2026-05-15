@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from opentelemetry import trace
-from PIL import Image
+from PIL import Image, ImageOps
 from strands import tool
 
 _tracer = trace.get_tracer(__name__)
@@ -51,6 +51,14 @@ def _run_git(*args: str, cwd: Path | None = None) -> str:
         check=True,
     )
     return result.stdout
+
+
+def _human_bytes(n: int) -> str:
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / 1024 / 1024:.1f} MB"
 
 
 def _validate_path(rel_path: str) -> Path:
@@ -137,39 +145,42 @@ def view_site_image_impl(path: str) -> dict[str, Any]:
     fmt = _BEDROCK_IMAGE_FORMATS[suffix]
 
     with _tracer.start_as_current_span("view_site_image") as span:
-        span.set_attribute("image.path", str(target.relative_to(WORKSPACE_DIR)))
-        original_bytes = target.read_bytes()
-        span.set_attribute("image.input_bytes", len(original_bytes))
+        rel = str(target.relative_to(WORKSPACE_DIR))
+        span.set_attribute("image.path", rel)
+        original_size = target.stat().st_size
+        span.set_attribute("image.input_bytes", original_size)
 
-        img = Image.open(BytesIO(original_bytes))
-        span.set_attribute("image.input_width", img.width)
-        span.set_attribute("image.input_height", img.height)
-        long_edge = max(img.width, img.height)
+        img = ImageOps.exif_transpose(Image.open(target))
+        orig_w, orig_h = img.width, img.height
+        span.set_attribute("image.input_width", orig_w)
+        span.set_attribute("image.input_height", orig_h)
+        long_edge = max(orig_w, orig_h)
 
         if long_edge > _VIEW_MAX_EDGE:
             scale = _VIEW_MAX_EDGE / long_edge
-            new_size = (int(img.width * scale), int(img.height * scale))
-            resized = img.convert("RGB" if fmt == "jpeg" else img.mode).resize(
-                new_size, Image.LANCZOS
-            )
-            buf = BytesIO()
-            save_kwargs: dict[str, Any] = {"format": fmt.upper()}
-            if fmt == "jpeg":
-                save_kwargs["quality"] = 85
-            resized.save(buf, **save_kwargs)
-            view_bytes = buf.getvalue()
-            span.set_attribute("image.output_width", new_size[0])
-            span.set_attribute("image.output_height", new_size[1])
-        else:
-            view_bytes = original_bytes
-            span.set_attribute("image.output_width", img.width)
-            span.set_attribute("image.output_height", img.height)
+            new_size = (int(orig_w * scale), int(orig_h * scale))
+            img = img.resize(new_size, Image.LANCZOS)
+
+        if fmt == "jpeg" and img.mode != "RGB":
+            img = img.convert("RGB")
+        buf = BytesIO()
+        save_kwargs: dict[str, Any] = {"format": fmt.upper()}
+        if fmt == "jpeg":
+            save_kwargs["quality"] = 85
+        img.save(buf, **save_kwargs)
+        view_bytes = buf.getvalue()
+        span.set_attribute("image.output_width", img.width)
+        span.set_attribute("image.output_height", img.height)
         span.set_attribute("image.output_bytes", len(view_bytes))
 
+    summary = (
+        f"Viewing {rel} -- {orig_w}x{orig_h} pixels, "
+        f"{_human_bytes(original_size)} on disk"
+    )
     return {
         "status": "success",
         "content": [
-            {"text": f"Viewing {target.relative_to(WORKSPACE_DIR)}"},
+            {"text": summary},
             {"image": {"format": fmt, "source": {"bytes": view_bytes}}},
         ],
     }
@@ -194,10 +205,23 @@ def push_site_changes_impl(remote_branch: str = "main") -> dict[str, Any]:
     Relies on the local git credential helper for auth; no token
     plumbing here. On auth failure, git exits non-zero and subprocess
     raises -- the caller sees the original git stderr.
+
+    Honors CYNDIBOT_SKIP_PUSH=1 as a test-only escape hatch: returns
+    pushed=False without touching the remote. Used by smoke scripts
+    that exercise the full agent loop but should not publish.
     """
     global _LAST_PUSHED_SHA
-    _run_git("push", "origin", f"HEAD:{remote_branch}")
     head = _run_git("rev-parse", "HEAD").strip()
+    if os.environ.get("CYNDIBOT_SKIP_PUSH") == "1":
+        _LAST_PUSHED_SHA = head
+        return {
+            "pushed": False,
+            "remote_branch": remote_branch,
+            "head": head,
+            "skipped": True,
+            "reason": "CYNDIBOT_SKIP_PUSH=1",
+        }
+    _run_git("push", "origin", f"HEAD:{remote_branch}")
     _LAST_PUSHED_SHA = head
     return {
         "pushed": True,

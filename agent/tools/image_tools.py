@@ -6,7 +6,7 @@ from opentelemetry import trace
 from PIL import Image, ImageOps
 from strands import tool
 
-from agent.tools.site_tools import WORKSPACE_DIR, _validate_path
+from agent.tools.site_tools import WORKSPACE_DIR, _human_bytes, _validate_path
 
 _tracer = trace.get_tracer(__name__)
 
@@ -43,6 +43,30 @@ def _save(img: Image.Image, target_path, fmt: str) -> None:
         if img.mode != "RGB":
             img = img.convert("RGB")
     img.save(target_path, **save_kwargs)
+
+
+def image_info_impl(path: str) -> dict[str, Any]:
+    target = _validate_path(path)
+    if not target.is_file():
+        raise FileNotFoundError(f"no such file in workspace: {path!r}")
+    fmt = _format_for(target)
+
+    with _tracer.start_as_current_span("image_info") as span:
+        rel = str(target.relative_to(WORKSPACE_DIR))
+        span.set_attribute("image.path", rel)
+        size = target.stat().st_size
+        img = ImageOps.exif_transpose(Image.open(target))
+        span.set_attribute("image.width", img.width)
+        span.set_attribute("image.height", img.height)
+        span.set_attribute("image.bytes", size)
+        return {
+            "path": rel,
+            "width": img.width,
+            "height": img.height,
+            "bytes": size,
+            "bytes_human": _human_bytes(size),
+            "format": fmt.lower(),
+        }
 
 
 def resize_site_image_impl(path: str, max_edge: int) -> dict[str, Any]:
@@ -120,6 +144,28 @@ def rotate_site_image_impl(path: str, degrees: int) -> dict[str, Any]:
             "bytes": out_bytes,
             "rotated_degrees_clockwise": degrees,
         }
+
+
+@tool
+def image_info(path: str) -> dict[str, Any]:
+    """Return dimensions and file size of an image without invoking
+    vision. Cheap and fast -- use this when you only need to decide
+    whether to resize/rotate, without spending vision tokens to
+    actually look at the picture.
+
+    Dimensions are reported after EXIF orientation is applied -- the
+    same dimensions a browser would render. A phone photo stored
+    4000x3000 with EXIF orientation 6 (rotate-90-for-display) reports
+    width=3000, height=4000 here, because that's what a viewer sees.
+
+    Args:
+        path: Path relative to the workspace root, e.g. "images/garden.jpg".
+
+    Returns:
+        Dict with path, width, height (post-EXIF), bytes, bytes_human,
+        and format.
+    """
+    return image_info_impl(path)
 
 
 @tool

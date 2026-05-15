@@ -3,6 +3,7 @@ from strands.models import BedrockModel
 
 from agent.image_subagent import edit_images
 from agent.tools.email_tools import parse_inbound, send_reply
+from agent.tools.image_tools import image_info
 from agent.tools.site_tools import (
     commit_site_changes,
     delete_site_file,
@@ -48,6 +49,11 @@ You will be given an S3 key pointing at a raw email. Workflow:
      you want to keep, plan where to reference them in HTML
      (gallery.html is the usual home; pages can also embed them
      directly).
+
+     Use image_info to check an image's dimensions and file size
+     without spending vision tokens. view_site_image also reports
+     dimensions in its text block, so if you're already looking at
+     the image you don't need a separate image_info call.
 
      If an image is sideways/upside-down, or its long edge is much
      larger than 1600px (phone photos are commonly ~4000px), call
@@ -116,6 +122,7 @@ def build_agent(thread_id: str | None = None) -> Agent:
             write_site_file,
             delete_site_file,
             view_site_image,
+            image_info,
             edit_images,
             commit_site_changes,
             push_site_changes,

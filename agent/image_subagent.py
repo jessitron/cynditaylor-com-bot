@@ -3,7 +3,7 @@
 from strands import Agent, tool
 from strands.models import BedrockModel
 
-from agent.tools.image_tools import resize_site_image, rotate_site_image
+from agent.tools.image_tools import image_info, resize_site_image, rotate_site_image
 from agent.tools.site_tools import view_site_image
 
 REGION = "us-west-2"
@@ -15,15 +15,18 @@ You receive a plain-English instruction about one or more images that
 are already on disk in the site workspace (paths relative to the
 workspace root, e.g. "images/garden.jpg"). Your job:
 
-  1. Use view_site_image to look at each image first, so you know its
-     current orientation and dimensions.
+  1. Call image_info to learn current dimensions and file size cheaply.
+     If rotation is in scope, also call view_site_image to actually
+     see whether the image is oriented correctly. For resize-only
+     work, image_info alone is enough.
   2. Apply rotate_site_image and/or resize_site_image as needed.
      - Rotation is 90, 180, or 270 degrees clockwise only.
      - Resize is by max_edge (long edge in pixels). For web display
        on Cyndi's site, 1600px is a sensible default unless the
        parent asks for something specific.
-  3. If you're unsure the result is correct (e.g. you rotated and want
-     to confirm orientation), use view_site_image again to verify.
+  3. If you rotated and want to confirm orientation looks right, use
+     view_site_image again. For resize-only work, the dimensions in
+     the resize_site_image return value are sufficient.
   4. Return a short summary listing each image you touched and its
      final dimensions. If you decided no edit was needed, say so and
      why.
@@ -38,7 +41,7 @@ def build_image_agent() -> Agent:
     return Agent(
         model=model,
         system_prompt=SYSTEM_PROMPT,
-        tools=[view_site_image, resize_site_image, rotate_site_image],
+        tools=[image_info, view_site_image, resize_site_image, rotate_site_image],
     )
 
 
