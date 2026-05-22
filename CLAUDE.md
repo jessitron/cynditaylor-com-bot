@@ -6,13 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 In progress, partially built. **`notes/ACTIVE.md` is the source of truth for what exists vs. what's planned** — read it before assuming anything about layout or current state. Telemetry work (OTel/Phoenix/Honeycomb shape) is a separate line of work tracked in **`notes/TELEMETRY.md`**.
 
-Built: local Strands agent (`agent/cyndibot.py`, `agent/inbound.py`), full OTel → Phoenix and → Honeycomb, SES inbound + outbound end-to-end on `cyndibot.jessitron.honeydemo.io`, site-edit tools (`agent/tools/site_tools.py`) with clone/sync/edit/commit, AgentCore runtime deployed (`cyndibot-o2gGSvB6Hz` in us-west-2), local container parity.
+Built: local Strands agent (`agent/cyndibot.py`, `agent/inbound.py`), full OTel → Phoenix and → Honeycomb (via Boswell collector), SES inbound + outbound end-to-end on `cyndibot.jessitron.honeydemo.io`, site-edit tools (`agent/tools/site_tools.py`) with clone/sync/read/write/delete/commit/push, image tools (`agent/tools/image_tools.py` + `agent/image_subagent.py`) for viewing/inspecting/rotating/resizing attachments, AgentCore runtime deployed (`cyndibot-o2gGSvB6Hz` in us-west-2), `GITHUB_TOKEN` in Secrets Manager (fetched by container at startup), SES → Lambda → AgentCore dispatcher (`lambda/invoke_agent/`) wired into the `cyndibot-inbound` receipt rule, local container parity. The full pipeline runs end-to-end in cloud.
 
-Not yet built: SES → Lambda glue (today the agent is invoked manually via `scripts/agent-inbound` or `scripts/pretend-mom-roundtrip`), SES production-access (still in sandbox).
+Not yet built: SES production-access (still in sandbox — outbound replies only go to verified addresses).
 
 ## What we're building
 
-An agent that lets Jessitron's mom update her static HTML GitHub Pages site (`cynditaylor-com`) by **sending email**. Pipeline: mom emails `*@cyndibot.jessitron.honeydemo.io` → Amazon SES inbound → S3 (raw MIME, source of truth) → (planned) Lambda → AWS AgentCore Runtime → Strands Agent (tools: `parse_inbound`, `send_reply`, `sync_workspace`, `read/write/list_site_file`, `commit_site_changes`, `push_site_changes`) → commit + push to the site repo → GitHub Pages deploys → SES `SendEmail` reply back to mom. Observability via OpenTelemetry → Arize Phoenix locally and Honeycomb in the cloud.
+An agent that lets Jessitron's mom update her static HTML GitHub Pages site (`cynditaylor-com`) by **sending email**. Pipeline: mom emails `*@cyndibot.jessitron.honeydemo.io` → Amazon SES inbound → S3 (raw MIME, source of truth) → dispatcher Lambda (`lambda/invoke_agent/`) → AWS AgentCore Runtime → Strands Agent (tools: `parse_inbound`, `send_reply`, `sync_workspace`, `list_site_files`, `read_site_file`, `write_site_file`, `delete_site_file`, `view_site_image`, `image_info`, `edit_images` subagent, `commit_site_changes`, `push_site_changes`) → commit + push to the site repo → GitHub Pages deploys → SES `SendEmail` reply back to mom. Observability via OpenTelemetry → Arize Phoenix locally and Honeycomb (via the Boswell collector lambda) in the cloud.
 
 > **Why email, not SMS?** Earlier plan used Twilio SMS. US toll-free A2P / 10DLC carrier compliance was disproportionate for a 1:1 bot, so we pivoted to SES. **Don't add new Twilio code.**
 
@@ -62,7 +62,7 @@ There's also `collector/` — an OTel collector deployed as a Lambda ("Boswell")
 
 ## Skills in this repo
 
-Self-contained skill docs in `notes/skills/`. Read the matching one before doing similar work in this or another project:
+Self-contained skill docs in `notes/skills/<name>/SKILL.md`. Read the matching one before doing similar work in this or another project:
 
 - `strands-honeycomb-tracing` — Strands Agent OTel setup that lands queryable columns in Honeycomb's AI view.
 - `otel-collector-on-lambda` — packaging the OTel Collector as a Lambda container image. Six gotchas paid in blood.
