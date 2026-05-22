@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# End-to-end smoke of the image-editing subagent: an oversized,
+# sideways photo flows through the full LLM loop.
+#
+#   1. Stage a synthetic inbound (one 4000x3000 sideways JPEG) in S3.
+#   2. Run the local agent loop against that S3 key (Bedrock direct,
+#      not AgentCore).
+#   3. Print the resulting commit + diff + Phoenix trace URL.
+#
+# Safety: runs the agent against a throwaway workspace
+# (/tmp/cyndibot-smoke-...) AND sets CYNDIBOT_SKIP_PUSH=1 so
+# push_site_changes is a no-op. Nothing reaches origin/main or live
+# cynditaylor.com.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# shellcheck disable=SC1091
+source .env
+
+TMP_WORKSPACE="$(mktemp -d -t cyndibot-smoke-XXXXXX)"
+export CYNDIBOT_WORKSPACE="${TMP_WORKSPACE}/cynditaylor-com"
+export CYNDIBOT_SKIP_PUSH=1
+
+echo "=== Safety harness ==="
+echo "  CYNDIBOT_WORKSPACE = ${CYNDIBOT_WORKSPACE}"
+echo "  CYNDIBOT_SKIP_PUSH = ${CYNDIBOT_SKIP_PUSH}"
+echo
+
+echo "=== Staging sideways inbound in S3 ==="
+KEY=$(uv run python scripts/_stage_sideways_picture_inbound.py)
+echo "staged: s3://cyndibot-incoming-emails/${KEY}"
+echo
+
+echo "=== Running agent (local Bedrock, throwaway workspace, no push) ==="
+uv run python -m agent.inbound "${KEY}"
+echo
+
+echo "=== Final workspace state ==="
+if [[ -d "${CYNDIBOT_WORKSPACE}/.git" ]]; then
+  ( cd "${CYNDIBOT_WORKSPACE}" && git log --oneline -5 && echo && git show --stat HEAD )
+else
+  echo "(no workspace -- sync_workspace did not run)"
+fi
+echo
+
+echo "=== Latest Phoenix trace ==="
+scripts/check-last-span
+
+echo
+echo "Workspace preserved at: ${CYNDIBOT_WORKSPACE}"
+echo "Delete with: rm -rf ${TMP_WORKSPACE}"
