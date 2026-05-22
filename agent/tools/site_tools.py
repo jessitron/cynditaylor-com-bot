@@ -43,14 +43,29 @@ def get_last_pushed_sha() -> str | None:
 
 
 def _run_git(*args: str, cwd: Path | None = None) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=str(cwd or WORKSPACE_DIR),
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout
+    subcommand = args[0] if args else ""
+    run_cwd = str(cwd or WORKSPACE_DIR)
+    with _tracer.start_as_current_span(f"git.{subcommand}") as span:
+        span.set_attribute("git.subcommand", subcommand)
+        span.set_attribute("git.argv", " ".join(args)[:512])
+        span.set_attribute("git.cwd", run_cwd)
+        try:
+            result = subprocess.run(
+                ["git", *args],
+                cwd=run_cwd,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            span.set_attribute("git.exit_code", exc.returncode)
+            if exc.stderr:
+                span.set_attribute("git.stderr", exc.stderr[-2048:])
+            span.set_status(trace.StatusCode.ERROR, f"git {subcommand} failed")
+            raise
+        span.set_attribute("git.exit_code", 0)
+        span.set_attribute("git.stdout_bytes", len(result.stdout))
+        return result.stdout
 
 
 def _human_bytes(n: int) -> str:

@@ -1,0 +1,11 @@
+#!/usr/bin/env -S uv run --quiet python
+"""Verify agent.tools.site_tools imports cleanly after edits."""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import agent.tools.site_tools  # noqa: F401
+
+print("OK: agent.tools.site_tools imports cleanly")
