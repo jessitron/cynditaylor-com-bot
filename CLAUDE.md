@@ -8,7 +8,7 @@ In progress, partially built. **`notes/ACTIVE.md` is the source of truth for wha
 
 Built: local Strands agent (`agent/cyndibot.py`, `agent/inbound.py`), full OTel → Phoenix and → Honeycomb, SES inbound + outbound end-to-end on `cyndibot.jessitron.honeydemo.io`, site-edit tools (`agent/tools/site_tools.py`) with clone/sync/edit/commit, AgentCore runtime deployed (`cyndibot-o2gGSvB6Hz` in us-west-2), local container parity.
 
-Not yet built: SES → Lambda glue (today the agent is invoked manually via `scripts/agent-inbound` or `scripts/pretend-mom-roundtrip`), `push_site_changes` wired into the agent, `GITHUB_TOKEN` in Secrets Manager for cloud pushes, SES production-access (still in sandbox).
+Not yet built: SES → Lambda glue (today the agent is invoked manually via `scripts/agent-inbound` or `scripts/pretend-mom-roundtrip`), SES production-access (still in sandbox).
 
 ## What we're building
 
