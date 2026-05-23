@@ -64,3 +64,7 @@ def main() -> None:
     print("  - one span 'local-collector-smoke-test'")
     print("  - span attrs include smoke.lifted_attr, smoke.marker")
     print("  - collector.boswell=washere, collector.boswell.version=<git short-sha>")
+
+
+if __name__ == "__main__":
+    main()

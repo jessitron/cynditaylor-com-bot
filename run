@@ -26,6 +26,16 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
+# shellcheck disable=SC1091
+source "${ENV_FILE}"
+
+for v in INGEST_BEARER_TOKEN HONEYCOMB_API_KEY HONEYCOMB_OTLP_ENDPOINT; do
+  if [[ -z "${!v:-}" ]]; then
+    echo "FAIL: ${v} is unset in ${ENV_FILE}" >&2
+    exit 1
+  fi
+done
+
 if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
   echo "Collector already running -> http://localhost:4318"
   exit 0
@@ -47,7 +57,9 @@ fi
 echo "Starting otel-collector-contrib (BOSWELL_VERSION=${BOSWELL_VERSION})..."
 docker run -d \
   --name "${CONTAINER}" \
-  --env-file "${ENV_FILE}" \
+  -e "INGEST_BEARER_TOKEN=${INGEST_BEARER_TOKEN}" \
+  -e "HONEYCOMB_API_KEY=${HONEYCOMB_API_KEY}" \
+  -e "HONEYCOMB_OTLP_ENDPOINT=${HONEYCOMB_OTLP_ENDPOINT}" \
   -e "BOSWELL_VERSION=${BOSWELL_VERSION}" \
   -p 4318:4318 \
   -v "${CONFIG_FILE}:/etc/otelcol-contrib/config.yaml:ro" \
