@@ -88,12 +88,12 @@ scripts/agentcore-smoke-invoke    # invoke-agent-runtime against the deployed ru
 scripts/ses-show-inbound      # cat newest S3 inbound MIME
 scripts/ses-list-verified     # list SES identities (sandbox membership check)
 scripts/ses-verify-email <addr>   # add an address identity (recipient must click verification mail)
-scripts/check-phoenix         # local Phoenix container health check
+scripts/check-collector       # send a synthetic span to the local collector
 ```
 
 ## Telemetry
 
-OTel → Phoenix locally, → Honeycomb in cloud (via Boswell). See `notes/TELEMETRY.md` for current shape and gotchas. Use the Phoenix MCP (`mcp__phoenix__list-traces`, `mcp__phoenix__get-trace`) to inspect local traces.
+OTel → Honeycomb in both envs. Local: a small `otel-collector-contrib` container (`./run`, config in `collector/config.local.yaml`) listens on `localhost:4318` and forwards to the "local" Honeycomb env. Cloud: the Boswell collector Lambda forwards to env `cynditaylor-com-bot`. See `notes/TELEMETRY.md` for current shape and gotchas. Use the Honeycomb MCP to inspect traces.
 
 ## Related components
 

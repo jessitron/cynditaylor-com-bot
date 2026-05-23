@@ -90,7 +90,7 @@ OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer <token>
 2. Replace the `OTEL_EXPORTER_OTLP_HEADERS` line with `authorization=Bearer <token>` (drop the Honeycomb team header — the collector adds it on egress).
 3. Re-run `scripts/agentcore-update`.
 
-Phoenix (local dev) bypasses the collector — the cleanup is only needed on the cloud path. Leave the local exporter pointing at `http://localhost:6006/v1/traces`.
+The local-dev collector (a smaller config in `collector/config.local.yaml`, started by `./run`) follows the same producer-side env vars: `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces` with no bearer auth, and the local collector reads `HONEYCOMB_API_KEY` + `HONEYCOMB_OTLP_ENDPOINT` from the project-root `.env` to forward to the Honeycomb "local" environment.
 
 ## Reuse in another project
 

@@ -1,31 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PHOENIX_CONTAINER="cynditaylor-phoenix"
-PHOENIX_IMAGE="arizephoenix/phoenix:latest"
+# Local OTel collector — sends traces to the Honeycomb "local" environment.
+# Reads HONEYCOMB_API_KEY and HONEYCOMB_OTLP_ENDPOINT from .env via --env-file.
+# Cloud uses a separate collector (Boswell Lambda) with its own key; see
+# collector/README.md.
 
-start_phoenix() {
-  if docker ps --format '{{.Names}}' | grep -q "^${PHOENIX_CONTAINER}$"; then
-    echo "Phoenix already running -> http://localhost:16006"
-    return
-  fi
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="${REPO_DIR}/.env"
+CONFIG_FILE="${REPO_DIR}/collector/config.local.yaml"
+CONTAINER="cynditaylor-collector"
+IMAGE="otel/opentelemetry-collector-contrib:latest"
 
-  if docker ps -a --format '{{.Names}}' | grep -q "^${PHOENIX_CONTAINER}$"; then
-    echo "Starting existing Phoenix container..."
-    docker start "${PHOENIX_CONTAINER}" >/dev/null
-  else
-    echo "Pulling and starting Phoenix..."
-    docker run -d \
-      --name "${PHOENIX_CONTAINER}" \
-      -p 16006:6006 \
-      -p 16317:4317 \
-      -p 16318:4318 \
-      "${PHOENIX_IMAGE}" >/dev/null
-  fi
+if [[ ! -f "${ENV_FILE}" ]]; then
+  echo "FAIL: ${ENV_FILE} not found. Copy .env.example and fill in HONEYCOMB_API_KEY." >&2
+  exit 1
+fi
 
-  echo "Phoenix UI  -> http://localhost:16006"
-  echo "OTLP HTTP   -> http://localhost:16318/v1/traces"
-  echo "OTLP gRPC   -> http://localhost:16317"
-}
+if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
+  echo "Collector already running -> http://localhost:4318"
+  exit 0
+fi
 
-start_phoenix
+if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
+  echo "Removing stale stopped container..."
+  docker rm "${CONTAINER}" >/dev/null
+fi
+
+echo "Starting otel-collector-contrib..."
+docker run -d \
+  --name "${CONTAINER}" \
+  --env-file "${ENV_FILE}" \
+  -p 4318:4318 \
+  -v "${CONFIG_FILE}:/etc/otelcol-contrib/config.yaml:ro" \
+  "${IMAGE}" \
+  --config=/etc/otelcol-contrib/config.yaml >/dev/null
+
+echo "OTLP HTTP -> http://localhost:4318/v1/traces"
+echo "Logs      -> docker logs -f ${CONTAINER}"

@@ -1,0 +1,36 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Lift the gen_ai input/output message attributes that Strands records as
+  # span events onto the parent span. Without this, Honeycomb's columnar UI
+  # can't query the message bodies — same OTTL trick Boswell runs in cloud.
+  transform/lift_gen_ai_event_attrs:
+    error_mode: ignore
+    trace_statements:
+      - context: spanevent
+        conditions:
+          - name == "gen_ai.client.inference.operation.details"
+        statements:
+          - merge_maps(span.attributes, attributes, "upsert")
+
+exporters:
+  otlphttp/honeycomb:
+    endpoint: ${env:HONEYCOMB_OTLP_ENDPOINT}
+    headers:
+      x-honeycomb-team: ${env:HONEYCOMB_API_KEY}
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform/lift_gen_ai_event_attrs]
+      exporters: [otlphttp/honeycomb, debug]
+  telemetry:
+    logs:
+      level: info

@@ -1,10 +1,10 @@
 # Artist Website Update Agent
 
-An AI agent that updates a static HTML GitHub Pages site based on email messages. Built with Strands Agents on AWS AgentCore, instrumented with Arize Phoenix via OpenTelemetry.
+An AI agent that updates a static HTML GitHub Pages site based on email messages. Built with Strands Agents on AWS AgentCore, instrumented with OpenTelemetry → Honeycomb (locally via a small `otel-collector-contrib` container, in cloud via the Boswell collector Lambda).
 
 ## Status: In progress
 
-This README describes the shape of the project. Some pieces are built (local Strands agent, full OTel → Phoenix, SES inbound pipeline end-to-end), some aren't (agent tools, Lambda, AgentCore deploy). See `notes/ACTIVE.md` for current state and `infra/README.md` for reproducible AWS setup.
+This README describes the shape of the project. Some pieces are built (local Strands agent, full OTel → Honeycomb in both envs, SES inbound pipeline end-to-end), some aren't (SES production access). See `notes/ACTIVE.md` for current state and `infra/README.md` for reproducible AWS setup.
 
 ## What it does
 
@@ -43,7 +43,7 @@ AWS AgentCore Runtime          │
     │       ├── tool: read/edit/grep      (filesystem)
     │       └── tool: commit + push       (shelled git)
     │
-    └── OpenTelemetry → Arize Phoenix  (observability)
+    └── OpenTelemetry → local collector → Honeycomb  (observability)
 ```
 
 | Concern | Choice |
@@ -57,7 +57,7 @@ AWS AgentCore Runtime          │
 | Webhook entry point | AWS Lambda (triggered by SES receipt rule) |
 | Site hosting | GitHub Pages (static HTML) |
 | Site source | GitHub repo — cloned into AgentCore session storage, committed via shelled `git` |
-| Observability | [Arize Phoenix](https://phoenix.arize.com/) via OpenTelemetry + OpenInference |
+| Observability | [Honeycomb](https://www.honeycomb.io/) via OpenTelemetry + OpenInference (local & cloud) |
 
 ## Project structure
 
@@ -96,10 +96,12 @@ GITHUB_REPO_OWNER=jessitron
 GITHUB_REPO_NAME=cynditaylor-com
 GITHUB_BRANCH=main
 
-# OpenTelemetry → Phoenix
+# OpenTelemetry → local collector → Honeycomb
 OTEL_SERVICE_NAME=cynditaylor-com-bot
-OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:16318/v1/traces
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+HONEYCOMB_API_KEY=                # ingest key for the "local" Honeycomb env
+HONEYCOMB_OTLP_ENDPOINT=https://api.honeycomb.io
 ```
 
 ## Getting started
@@ -109,22 +111,22 @@ OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 - Python 3.11+ and [`uv`](https://docs.astral.sh/uv/)
 - AWS account with Bedrock access (Claude Sonnet 4.5 enabled in us-west-2) and SES in the same region
 - GitHub fine-grained personal access token with Contents: read+write on the site repo
-- Docker (for local Phoenix and later AgentCore deployment)
+- Docker (for the local OTel collector and later AgentCore deployment)
 
 ### Local development
 
 ```bash
-# Start Phoenix (idempotent; leaves it running in the background)
-./run
-
-# Copy and fill in env vars
+# Copy and fill in env vars (HONEYCOMB_API_KEY for the "local" env)
 cp .env.example .env
+
+# Start the local OTel collector (idempotent; leaves it running in the background)
+./run
 
 # Smoke-test the Strands agent against Bedrock
 ./scripts/hello
 ```
 
-Phoenix UI: http://localhost:16006. Inspect traces via the Phoenix MCP (`mcp__phoenix__list-traces`, `mcp__phoenix__get-trace`).
+Inspect traces in Honeycomb's `local` environment via the Honeycomb MCP. `scripts/check-collector` sends a synthetic span and prints its trace ID.
 
 ### SES plumbing (one-time)
 
@@ -140,14 +142,14 @@ _Not built yet._ Plan: replace the S3 action in the `cyndibot-inbound` receipt r
 
 ## Observability
 
-Traces are instrumented via `openinference-instrumentation-bedrock` and `openinference-instrumentation-strands-agents` (a span processor that converts Strands' native OTel GenAI spans into OpenInference conventions). Sent to Phoenix via OTLP. Every agent run shows:
+Traces are instrumented via `openinference-instrumentation-bedrock` and Strands' native `gen_ai.*` OTel emission (`OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental`). Sent over OTLP to the local collector, which lifts `gen_ai.client.inference.operation.details` span-event attrs onto the parent span (OTTL `merge_maps`) and forwards to Honeycomb. Every agent run shows:
 - The incoming email's parsed fields
 - Which files were read / edited in the cloned repo
 - The LLM's reasoning and edits
 - The commit that was pushed
 - The SMTP send of the reply
 
-View traces at http://localhost:16006.
+View traces in Honeycomb — team `modernity`, env `local` for local runs, env `cynditaylor-com-bot` for cloud.
 
 ## Key decisions
 
@@ -168,4 +170,4 @@ Long-lived facts about mom (preferences, spelling quirks) that don't belong in e
 
 **Why no confirmation step?** The site is low-risk. The agent makes the change, pushes it, and emails mom a confirmation. If something's wrong, she replies — and the next invoke has the full email thread as context.
 
-**Why Arize Phoenix?** OTel-native, open source, self-hostable, and specifically good at the "what did the agent actually do" question — not just eval scores. Start here; we can add Honeycomb later if we want hosted/long-term storage.
+**Why Honeycomb everywhere?** One columnar, queryable backend for both local debugging and cloud production. The local collector runs the same OTTL `merge_maps` lift that Boswell does in cloud, so trace shape is identical in both environments — same boards, same queries, no schema drift. Previously this project ran Arize Phoenix locally; switched away because keeping two backends in sync (and remembering which one to look in) wasn't worth the offline-friendliness.

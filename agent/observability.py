@@ -27,7 +27,7 @@ class BedrockCostStampingProcessor(SpanProcessor):
     """Stamps cost.bedrock.* qty/price attributes on chat spans before export.
 
     Mutates span._attributes in on_end — this runs before the BatchSpanProcessor
-    serializes the span, so attributes land in both Phoenix and Honeycomb.
+    serializes the span, so attributes land in both local and cloud Honeycomb.
     """
 
     _CHAT_SPAN_NAMES = {"chat", "Model invoke"}

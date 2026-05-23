@@ -4,14 +4,14 @@ Tracing/observability work. Agent feature pipeline lives in `notes/ACTIVE.md`.
 
 ## Where traces go
 
-- **Local: Arize Phoenix** — `http://localhost:16318/v1/traces` (docker, started by `./run`). Project `cynditaylor-com-bot`. UI on `http://localhost:16006`.
-- **Cloud: Honeycomb** — team `modernity`, env `cynditaylor-com-bot`. Producer → Boswell collector → Honeycomb.
-- `.env` (gitignored) holds all OTel vars locally.
-- **After any run that emits traces, report the trace URL.** Locally: query the Phoenix MCP (`mcp__phoenix__list-traces`, `mcp__phoenix__get-trace`) and build `http://localhost:16006/projects/{projectId}/traces/{traceId}`. Cloud: surface the Honeycomb trace ID from AgentCore output.
+- **Local: Honeycomb "local" env via a local otel-collector-contrib container** — `http://localhost:4318/v1/traces` (docker, started by `./run`). The collector runs the same OTTL `merge_maps` lift that Boswell does in cloud, then forwards to `api.honeycomb.io`. Config in `collector/config.local.yaml`. Uses the local-env ingest key from `.env` (`HONEYCOMB_API_KEY`).
+- **Cloud: Honeycomb** — team `modernity`, env `cynditaylor-com-bot`. Producer → Boswell collector Lambda → Honeycomb.
+- `.env` (gitignored) holds all OTel vars locally. Cloud collector uses its own `collector/.env` with a different ingest key.
+- **After any run that emits traces, report the trace URL** in the matching Honeycomb env: query via the Honeycomb MCP. For the local env, traces appear under team `modernity`, env `local`.
 
 ## Current state
 
-- **Strands emits Honeycomb-shaped columns.** Removed `openinference-instrumentation-strands-agents` (its `metadata` JSON blob wasn't queryable). `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` makes Strands emit `gen_ai.{input,output}.messages` JSON arrays + `gen_ai.usage.*`, `gen_ai.server.*`, `gen_ai.tool.*` as columns. `BedrockInstrumentor` stays — it writes OpenInference natively. Phoenix lost its chat UI as a side effect; cloud is the production target.
+- **Strands emits Honeycomb-shaped columns.** Removed `openinference-instrumentation-strands-agents` (its `metadata` JSON blob wasn't queryable). `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` makes Strands emit `gen_ai.{input,output}.messages` JSON arrays + `gen_ai.usage.*`, `gen_ai.server.*`, `gen_ai.tool.*` as columns. `BedrockInstrumentor` stays — it writes OpenInference natively.
 - **Boswell** (`collector/`) — OTel collector as a Lambda container behind a Function URL. OTTL `merge_maps` lifts span-event attrs onto parent spans, drops empty events, stamps `collector.boswell.{,version,invocation_id}`, forwards synchronously to Honeycomb. URL `https://45exz5ki5veyvldhaojdynf3ty0pqnno.lambda-url.us-west-2.on.aws/`. AgentCore is wired through it. `WHERE collector.boswell exists` separates new traffic from legacy.
 - **`session.id` = email-thread id, on every span.** The dispatcher derives `session.id` from the email thread (`thread-<sha256(thread-root-Message-ID)>`, JWZ-lite over References / In-Reply-To / own Message-ID) and passes it as `runtimeSessionId` to AgentCore. AgentCore guarantees one microVM per session ([docs](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-sessions.html)) — so one thread = one warm `_agent` instance with the prior conversation history; new threads get fresh microVMs and clean state. `agent/observability.py::configure_tracing` stamps `session.id` (and the redundant-but-explicit `email.thread.id` and `email.from`) as **Resource** attributes. Honeycomb flattens resource attrs to columns; cross-dataset joins with the dispatcher work on a single column. The agent's `agent.invocation` root span additionally stamps `invocation.id` (the per-Lambda-invocation uuid) so we can distinguish individual emails inside a thread.
 
@@ -53,7 +53,7 @@ Non-cost observability on `execute_tool parse_inbound`:
 
 HEIC conversion is its own child span `convert_heic_to_jpg` (one per HEIC) carrying `image.original_filename`, `image.input_bytes`, `image.output_bytes`, `image.target_path`. Wall time is span timing — no separate `heic_conversion_ms` attr. One span per attachment is fine for typical multi-photo emails; if mom ever sends 50 we can revisit.
 
-Verified Phoenix trace `10e00b18f421d939a51c6cf49d6b528d` (later traces will also show the new `convert_heic_to_jpg` child spans).
+Verified Honeycomb trace `10e00b18f421d939a51c6cf49d6b528d` (later traces will also show the new `convert_heic_to_jpg` child spans).
 
 For "find picture-bearing emails," query the agent dataset directly: `WHERE email.attachment.count > 0`. Cross-dataset joins on `session.id` give you the matching dispatcher events without needing to mirror the count.
 
@@ -70,7 +70,7 @@ Stamp on the parse span. Constant goes in `agent/tools/email_tools.py`. Lowest p
 
 ### Done: Bedrock tokens ✅
 
-Producer-side. `agent/pricing.py` holds the model→price table (per-token, not per-million); `BedrockCostStampingProcessor` in `agent/observability.py` runs as a SpanProcessor before the BatchSpanProcessor and mutates `span._attributes` in `on_end` for spans named `chat`. Lands cost attrs in both Phoenix and Honeycomb.
+Producer-side. `agent/pricing.py` holds the model→price table (per-token, not per-million); `BedrockCostStampingProcessor` in `agent/observability.py` runs as a SpanProcessor before the BatchSpanProcessor and mutates `span._attributes` in `on_end` for spans named `chat`. Lands cost attrs in both local and cloud Honeycomb envs.
 
 Four buckets, all independent (Bedrock returns `inputTokens`, `cacheReadInputTokens`, `cacheWriteInputTokens`, `outputTokens` separately — `inputTokens` does *not* include cache tokens, so they multiply against three different prices):
 
@@ -81,7 +81,7 @@ Four buckets, all independent (Bedrock returns `inputTokens`, `cacheReadInputTok
 | `gen_ai.usage.cache_read_input_tokens` | `cost.bedrock.cache_read.{qty,price}` |
 | `gen_ai.usage.cache_write_input_tokens` | `cost.bedrock.cache_write.{qty,price}` |
 
-Cache prices assume the 5-minute TTL (the Bedrock default). Cache attrs are only stamped when Strands stamped the matching token attr — no zero-pad. Verified Phoenix trace `13a848fada1ab330840765a3e2ff2970` (no cache hits this run, so input/output only).
+Cache prices assume the 5-minute TTL (the Bedrock default). Cache attrs are only stamped when Strands stamped the matching token attr — no zero-pad. Verified Honeycomb trace `13a848fada1ab330840765a3e2ff2970` (no cache hits this run, so input/output only).
 
 **How cache buckets compose on a single call.** Bedrock's `Converse` `usage` returns four independent counts:
 
@@ -98,7 +98,7 @@ Not yet exercised on a real cache-hit run — Strands doesn't enable Bedrock pro
 
 **Why mutate `_attributes` directly?** `Span.set_attribute` no-ops after `_end_time` is set, but `BoundedAttributes` is created with `immutable=False` and stays mutable for the span's lifetime. The same `_attributes` dict is shared between the live `Span` and the `ReadableSpan` passed to each on_end, so writes from our processor land in the version BatchSpanProcessor exports. Standard pattern; slightly hacky.
 
-**Why producer-side over collector-side:** keeps the qty/price pattern uniform with `SES_SEND_USD`, and local Phoenix sees the same data as Honeycomb. Lambda costs will likely be collector-side later (the producer doesn't see its own runtime billing).
+**Why producer-side over collector-side:** keeps the qty/price pattern uniform with `SES_SEND_USD`, and the local Honeycomb env sees the same data as cloud. Lambda costs will likely be collector-side later (the producer doesn't see its own runtime billing).
 
 ### Done: AgentCore runtime ✅
 
@@ -120,7 +120,7 @@ cpu.seconds / 3600 * cpu.usd_per_hour
 + peak_rss_bytes / 1e9 * (duration_ms / 3_600_000) * memory.usd_per_gb_hour
 ```
 
-Verified Phoenix trace `2a8948fb779d9ed08cdc71e8bdbaef62` (CPU 0.65s, peak RSS 119 MB, ~17.5s wall → ~$2.2e-5 per email).
+Verified Honeycomb trace `2a8948fb779d9ed08cdc71e8bdbaef62` (CPU 0.65s, peak RSS 119 MB, ~17.5s wall → ~$2.2e-5 per email).
 
 **Caveats kept for honesty:**
 

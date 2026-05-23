@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Send a synthetic OTLP/HTTP-protobuf trace to the local collector and print
+# the trace_id so you can pull it up in Honeycomb's "local" environment.
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+CONTAINER="cynditaylor-collector"
+
+if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
+  echo "FAIL: container '${CONTAINER}' is not running. Start it with ./run." >&2
+  exit 1
+fi
+
+cd "${REPO_DIR}"
+uv run python scripts/_send_local_smoke_otlp.py \
+  --endpoint "http://localhost:4318/v1/traces"
