@@ -1,7 +1,7 @@
 """Send a synthetic span with a gen_ai-style span-event to the local collector.
 
-Mirrors collector/scripts/_send_smoke_otlp.py minus the bearer auth — the
-local collector doesn't enforce auth on localhost. The span event the
+Mirrors collector/scripts/_send_smoke_otlp.py — the local collector enforces
+the same bearer auth as cloud (different token). The span event the
 collector should hoist onto the parent span via the OTTL transform.
 """
 
@@ -21,6 +21,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--endpoint", required=True)
+    ap.add_argument("--token", required=True)
     args = ap.parse_args()
 
     mem = InMemorySpanExporter()
@@ -45,7 +46,11 @@ def main() -> None:
     if not spans:
         sys.exit("no span captured — internal error")
 
-    result = OTLPSpanExporter(endpoint=args.endpoint).export(spans)
+    exporter = OTLPSpanExporter(
+        endpoint=args.endpoint,
+        headers={"authorization": f"Bearer {args.token}"},
+    )
+    result = exporter.export(spans)
 
     if result != SpanExportResult.SUCCESS:
         sys.exit(
@@ -58,3 +63,4 @@ def main() -> None:
     print('In Honeycomb "local" env (service=local-collector-smoke), expect:')
     print("  - one span 'local-collector-smoke-test'")
     print("  - span attrs include smoke.lifted_attr, smoke.marker")
+    print("  - collector.boswell=washere, collector.boswell.version=<git short-sha>")

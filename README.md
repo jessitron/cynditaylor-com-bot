@@ -100,7 +100,9 @@ GITHUB_BRANCH=main
 OTEL_SERVICE_NAME=cynditaylor-com-bot
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-HONEYCOMB_API_KEY=                # ingest key for the "local" Honeycomb env
+OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer local-dev-token
+INGEST_BEARER_TOKEN=local-dev-token   # localhost only; same value as the header
+HONEYCOMB_API_KEY=                    # ingest key for the "local" Honeycomb env
 HONEYCOMB_OTLP_ENDPOINT=https://api.honeycomb.io
 ```
 

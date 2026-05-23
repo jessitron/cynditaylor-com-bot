@@ -93,7 +93,7 @@ scripts/check-collector       # send a synthetic span to the local collector
 
 ## Telemetry
 
-OTel → Honeycomb in both envs. Local: a small `otel-collector-contrib` container (`./run`, config in `collector/config.local.yaml`) listens on `localhost:4318` and forwards to the "local" Honeycomb env. Cloud: the Boswell collector Lambda forwards to env `cynditaylor-com-bot`. See `notes/TELEMETRY.md` for current shape and gotchas. Use the Honeycomb MCP to inspect traces.
+OTel → Honeycomb in both envs, running the *same* `collector/config.yaml` end-to-end. Local: an `otel-collector-contrib` container (`./run`) mounts the config and listens on `localhost:4318`, forwarding to the "local" Honeycomb env. Cloud: the same config ships inside the Boswell collector Lambda forwarding to env `cynditaylor-com-bot`. See `notes/TELEMETRY.md` for current shape and gotchas. Use the Honeycomb MCP to inspect traces.
 
 ## Related components
 

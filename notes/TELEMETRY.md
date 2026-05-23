@@ -4,7 +4,7 @@ Tracing/observability work. Agent feature pipeline lives in `notes/ACTIVE.md`.
 
 ## Where traces go
 
-- **Local: Honeycomb "local" env via a local otel-collector-contrib container** — `http://localhost:4318/v1/traces` (docker, started by `./run`). The collector runs the same OTTL `merge_maps` lift that Boswell does in cloud, then forwards to `api.honeycomb.io`. Config in `collector/config.local.yaml`. Uses the local-env ingest key from `.env` (`HONEYCOMB_API_KEY`).
+- **Local: Honeycomb "local" env via a local otel-collector-contrib container** — `http://localhost:4318/v1/traces` (docker, started by `./run`). Runs the *same* `collector/config.yaml` that Boswell uses in cloud, mounted into the container — identical trace shape across envs (same OTTL lift, same `collector.boswell.*` provenance). Producer sends the bearer token from `.env`'s `INGEST_BEARER_TOKEN` (a static localhost-only value); collector validates it the same way as cloud, just against a different token. Forwards to `api.honeycomb.io` using the local-env ingest key (`HONEYCOMB_API_KEY` in root `.env`).
 - **Cloud: Honeycomb** — team `modernity`, env `cynditaylor-com-bot`. Producer → Boswell collector Lambda → Honeycomb.
 - `.env` (gitignored) holds all OTel vars locally. Cloud collector uses its own `collector/.env` with a different ingest key.
 - **After any run that emits traces, report the trace URL** in the matching Honeycomb env: query via the Honeycomb MCP. For the local env, traces appear under team `modernity`, env `local`.

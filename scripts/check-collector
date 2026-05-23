@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Send a synthetic OTLP/HTTP-protobuf trace to the local collector and print
 # the trace_id so you can pull it up in Honeycomb's "local" environment.
+# Sources .env to pick up INGEST_BEARER_TOKEN (same shape as the cloud smoke).
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,6 +12,10 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
   exit 1
 fi
 
+# shellcheck disable=SC1091
+source "${REPO_DIR}/.env"
+
 cd "${REPO_DIR}"
 uv run python scripts/_send_local_smoke_otlp.py \
-  --endpoint "http://localhost:4318/v1/traces"
+  --endpoint "http://localhost:4318/v1/traces" \
+  --token "${INGEST_BEARER_TOKEN}"

@@ -90,7 +90,7 @@ OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer <token>
 2. Replace the `OTEL_EXPORTER_OTLP_HEADERS` line with `authorization=Bearer <token>` (drop the Honeycomb team header — the collector adds it on egress).
 3. Re-run `scripts/agentcore-update`.
 
-The local-dev collector (a smaller config in `collector/config.local.yaml`, started by `./run`) follows the same producer-side env vars: `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces` with no bearer auth, and the local collector reads `HONEYCOMB_API_KEY` + `HONEYCOMB_OTLP_ENDPOINT` from the project-root `.env` to forward to the Honeycomb "local" environment.
+The local-dev collector runs *this same `config.yaml`* in an `otel-collector-contrib` container (`./run` in the repo root). Producer-side env vars in project-root `.env`: `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces`, `OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer ${INGEST_BEARER_TOKEN}`. Container-side env: same `INGEST_BEARER_TOKEN` (a static localhost-only value, default `local-dev-token`), plus `HONEYCOMB_API_KEY` for the "local" env and `HONEYCOMB_OTLP_ENDPOINT`. `BOSWELL_VERSION` is derived from local git (`<short-sha>[-dirty]`) by `./run` so spans show which build of the config processed them. The X-Amzn-Trace-Id `from_context` lookup lands empty locally (no LWA upstream) — harmless.
 
 ## Reuse in another project
 

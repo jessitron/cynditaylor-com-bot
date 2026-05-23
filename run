@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Local OTel collector — sends traces to the Honeycomb "local" environment.
-# Reads HONEYCOMB_API_KEY and HONEYCOMB_OTLP_ENDPOINT from .env via --env-file.
-# Cloud uses a separate collector (Boswell Lambda) with its own key; see
-# collector/README.md.
+# Local OTel collector — runs the same collector/config.yaml that Boswell
+# uses in cloud, mounted into an otel/opentelemetry-collector-contrib
+# container. Forwards traces to the Honeycomb "local" environment.
+#
+# Why the same config as cloud? Identical trace shape in both environments
+# (same OTTL lift, same `collector.boswell.*` provenance) means boards and
+# queries built against one work against the other. The three diffs from
+# Boswell's Lambda packaging are absorbed at runtime:
+#   - Bearer auth: enforced here too, with a static localhost-only token.
+#   - X-Amzn-Trace-Id `from_context`: header not sent locally, attr lands
+#     empty. Harmless.
+#   - sending_queue disabled: was a Lambda freeze workaround, also fine
+#     at low local traffic.
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="${REPO_DIR}/.env"
-CONFIG_FILE="${REPO_DIR}/collector/config.local.yaml"
+CONFIG_FILE="${REPO_DIR}/collector/config.yaml"
 CONTAINER="cynditaylor-collector"
 IMAGE="otel/opentelemetry-collector-contrib:latest"
 
@@ -27,10 +36,19 @@ if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
   docker rm "${CONTAINER}" >/dev/null
 fi
 
-echo "Starting otel-collector-contrib..."
+# Stamp spans with this commit so we can tell, in Honeycomb, which build of
+# the config processed a span — same convention Boswell uses in cloud
+# (collector/scripts/build derives it via `git rev-parse --short HEAD`).
+BOSWELL_VERSION="$(git -C "${REPO_DIR}" rev-parse --short HEAD 2>/dev/null || echo dev)"
+if [[ -n "$(git -C "${REPO_DIR}" status --porcelain 2>/dev/null)" ]]; then
+  BOSWELL_VERSION="${BOSWELL_VERSION}-dirty"
+fi
+
+echo "Starting otel-collector-contrib (BOSWELL_VERSION=${BOSWELL_VERSION})..."
 docker run -d \
   --name "${CONTAINER}" \
   --env-file "${ENV_FILE}" \
+  -e "BOSWELL_VERSION=${BOSWELL_VERSION}" \
   -p 4318:4318 \
   -v "${CONFIG_FILE}:/etc/otelcol-contrib/config.yaml:ro" \
   "${IMAGE}" \

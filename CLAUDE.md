@@ -56,7 +56,7 @@ See README.md for the full architecture and the rationale in "Key decisions" (St
 Tracked as a separate line of work in **`notes/TELEMETRY.md`** — current shape, what's done, what's next. Two load-bearing rules to repeat here:
 
 - **After any test run that emits traces, report the trace URL** so Jessitron can click through. Use the Honeycomb MCP to find the trace and surface a permalink. Local traces land in team `modernity`, env `local`; cloud traces in env `cynditaylor-com-bot`.
-- Local collector runs in docker (`http://localhost:4318/v1/traces`, started by `./run`, config in `collector/config.local.yaml`) and forwards to Honeycomb. All OTel env vars live in the gitignored `.env`.
+- Local collector runs in docker (`http://localhost:4318/v1/traces`, started by `./run`) using the *same* `collector/config.yaml` Boswell uses in cloud — identical trace shape across envs. Forwards to Honeycomb. All OTel env vars live in the gitignored `.env`.
 
 There's also `collector/` — an OTel collector deployed as a Lambda ("Boswell") that post-processes traces between AgentCore and Honeycomb. See `collector/README.md`.
 
