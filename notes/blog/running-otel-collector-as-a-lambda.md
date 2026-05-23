@@ -1,8 +1,14 @@
 # Running the OpenTelemetry Collector as a Lambda
 
-The OpenTelemetry Collector is usually deployed as a long-running process — a sidecar, a DaemonSet, a Fargate task. You can also package it as a Lambda container image and front it with a Function URL. Producers send OTLP/HTTP to the URL; the collector runs whatever processors you configure; the result goes on to your backend.
+The OpenTelemetry Collector is usually deployed as a long-running process: a sidecar, a DaemonSet, an EC2 instance, a docker container on my computer. It sits there listening for telemetry. That's fine when I want to send telemetry all day, but not when telemetry is rare. Like right now, when I have an agent defined on AgentCore, and it runs a few times a week maybe. Or my website that hardly sees any traffic.
 
-At low volume this costs essentially nothing — a Fargate task at 0.25 vCPU / 0.5 GB runs about $9/month and idles 99.9% of the time, whereas a Lambda below the free tier rounds to zero. Cold start is around 4 seconds; warm invocations are 2–4 ms.
+Can I run the OpenTelemetry Collector as a Lambda function? Sounds tricky, but hey, that's what my coding assistant is for! Here is how we got it working:
+
+(from here, this post is agent-written, edited by me)
+
+You can package the OTel Collector as a Lambda container image and front it with a Function URL. Producers send OTLP/HTTP to the URL; the collector runs whatever processors you configure; the result goes on to your backend.
+
+At low volume this costs essentially nothing: a Lambda below the free tier rounds to zero. Cold start is around 4 seconds; warm invocations are 2–4 ms.
 
 ## When this fits
 
@@ -15,9 +21,8 @@ The Lambda shape works when:
 It does not fit when:
 
 - Sustained throughput exceeds about 1 request per second. Lambda's per-invocation overhead and pricing stop being free.
-- You need cross-invocation queuing or retry. If the backend is briefly unavailable, in-Lambda retry state dies with the process. Producer-side retry is your only safety net.
-- You want tail sampling that requires all spans of a trace in one place. Lambda invocations don't share memory.
-- You are shipping metrics or logs with periodic readers. The freeze-after-invocation lifecycle interacts badly with anything that expects a steady wall clock.
+- You need queuing or retry. If the backend is briefly unavailable, in-Lambda retry state dies with the process. Producer-side retry is your only safety net.
+- You're scraping metrics or logs. This is only for logs and traces that are pushed to the collector.
 
 ## Architecture
 
