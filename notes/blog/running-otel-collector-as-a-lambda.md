@@ -45,6 +45,8 @@ Lambda container image
 
 [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter) is the load-bearing piece. It registers as a Lambda extension, exposes the Lambda Runtime API as an HTTP listener on a port of your choosing, and forwards each invocation to your container's HTTP server. The Collector's OTLP/HTTP receiver is an HTTP server. LWA bridges them.
 
+TODO: Put a note about auth here, that this uses a static bearer token known by authorized producers and this lambda.
+
 ## The container image
 
 Use a multi-stage build. The official `otel/opentelemetry-collector-contrib` image is distroless and runs as `USER 10001` with no `/etc/passwd`, both of which the Lambda container runtime trips on. Copy the binary into Alpine and run from there.
@@ -114,6 +116,8 @@ service:
       exporters: [otlphttp/backend]
 ```
 
+TODO: make this send to Honeycomb. Remark that this is the case, and tell them to change the exporter to point to where they want.
+
 Two non-obvious settings:
 
 - **No `batch` processor.** Lambda freezes the container after the handler returns. Spans sitting in a `batch` processor never flush — they stay in memory until the next cold start (which discards them) or the next invocation (which may or may not arrive). Symptom: the exporter reports 200 in milliseconds, the backend never sees the trace.
@@ -152,6 +156,8 @@ docker buildx build \
 
 ### Push to ECR
 
+TODO: do we really want to tell them how to push to ECR? That feels like a basic thing. Let's just say "push to ECR" and then put the rest of this in an appendix or a GitHub gist that we link to. There, we need to tell them to create the repo because that's annoyingly a separate step.
+
 ```bash
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 REGION=us-west-2
@@ -167,6 +173,8 @@ docker push "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$REPO:latest"
 The ECR repository and a Lambda execution role need to exist before the first deploy.
 
 ### Create the Lambda
+
+TODO: where did that role come from?
 
 ```bash
 aws lambda create-function \
@@ -193,6 +201,8 @@ aws lambda create-function-url-config \
 ```
 
 ### Permissions — both statements are required
+
+TODO: is this generally true about lambas? Maybe it should be in some sort of appendix, if it is not specific to this collector.
 
 As of October 2025, `lambda:InvokeFunctionUrl` alone is not sufficient to allow public Function URL invocations. You also need `lambda:InvokeFunction` with `--invoked-via-function-url`:
 
@@ -231,7 +241,11 @@ Expected: **400**. The collector parses the invalid OTLP body and rejects it. A 
 
 **2. A real OTLP request succeeds.** Use any OTel SDK with `OTLPSpanExporter` and a `SimpleSpanProcessor` (not `BatchSpanProcessor` — for verification you want the export's return value to reflect the actual export status). Capture the result of `span_exporter.export(...)`. It should be `SUCCESS`.
 
+TODO: link to my "send a test span" post
+
 **3. The span lands in your backend.** Query by trace ID or service name. If the producer reported `SUCCESS` but the backend shows nothing, the most likely cause is an enabled `sending_queue` or a `batch` processor — see troubleshooting.
+
+TODO: mention the Honeycomb MCP
 
 ## CloudWatch volume
 
@@ -242,6 +256,8 @@ Approximate per-invocation log output:
 - **Container retirement** (Lambda recycles containers after idle): 4 lines (graceful shutdown).
 
 At 100 invocations per day with one cold start, this is roughly 315 lines and 10 KB per day. CloudWatch ingest is $0.50 per GB. The volume is negligible.
+
+TODO: don't say neglible, tell them the tiny number
 
 ---
 
@@ -265,19 +281,21 @@ A `batch` processor or an enabled `sending_queue` is holding spans in memory acr
 
 You can confirm this is the cause by setting the collector's log level to `debug` temporarily — you'll see the spans arrive at the exporter but no export attempt before the invocation ends.
 
+TODO: tell them how to set that log level
+
 ### `InvalidParameterValueException: image manifest ... is not supported` when creating the function
 
 Default `docker buildx` output is an OCI image manifest with build attestations, which Lambda's image-pull path rejects. Rebuild with `--provenance=false --sbom=false`.
 
 ### LWA logs `app is not ready after 2000ms` repeatedly, then init times out at 10 s
 
-The collector process never started. The most common cause is having both `ENTRYPOINT` and `CMD` in the Dockerfile — Lambda's container init handles CMD-only and ENTRYPOINT+CMD images differently, and with `ENTRYPOINT` set the main process doesn't come up. Use `CMD` only. This reproduces across distroless, `provided:al2023`, and Alpine bases; it is a Lambda-runtime behavior, not a base-image issue.
+The collector process never started. One cause is having both `ENTRYPOINT` and `CMD` in the Dockerfile — Lambda's container init handles CMD-only and ENTRYPOINT+CMD images differently, and with `ENTRYPOINT` set the main process doesn't come up. Use `CMD` only. This reproduces across distroless, `provided:al2023`, and Alpine bases; it is a Lambda-runtime behavior, not a base-image issue.
 
 Less common: the collector started but bound to a different port than `AWS_LWA_PORT`. Confirm the OTLP receiver's HTTP endpoint matches.
 
 ### Container won't start; logs mention permissions or `/etc/passwd`
 
-You're running the official `otel/opentelemetry-collector-contrib` image directly. It is distroless and runs as `USER 10001` with no `/etc/passwd`. Stage the binary into Alpine via a multi-stage build instead.
+You might be running the official `otel/opentelemetry-collector-contrib` image directly. It is distroless and runs as `USER 10001` with no `/etc/passwd`. Stage the binary into Alpine via a multi-stage build instead.
 
 ### `x509: certificate signed by unknown authority` from the exporter
 
