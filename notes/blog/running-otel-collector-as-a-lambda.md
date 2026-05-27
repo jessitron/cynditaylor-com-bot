@@ -100,10 +100,10 @@ processors:
   # Do NOT include a batch processor.
 
 exporters:
-  otlphttp/backend:
-    endpoint: ${env:OTLP_ENDPOINT}
+  otlphttp/honeycomb:
+    endpoint: https://api.honeycomb.io
     headers:
-      x-some-auth-header: ${env:BACKEND_API_KEY}
+      x-honeycomb-team: ${env:HONEYCOMB_API_KEY}
     sending_queue:
       enabled: false
 
@@ -113,10 +113,10 @@ service:
     traces:
       receivers: [otlp]
       processors: [...]
-      exporters: [otlphttp/backend]
+      exporters: [otlphttp/honeycomb]
 ```
 
-TODO: make this send to Honeycomb. Remark that this is the case, and tell them to change the exporter to point to where they want.
+This sends to Honeycomb. To send elsewhere, swap the exporter — any OTLP/HTTP backend works with the same shape (change the `endpoint` and the auth header name and value).
 
 Two non-obvious settings:
 
@@ -160,25 +160,11 @@ docker buildx build \
 
 ### Push to ECR
 
-TODO: do we really want to tell them how to push to ECR? That feels like a basic thing. Let's just say "push to ECR" and then put the rest of this in an appendix or a GitHub gist that we link to. There, we need to tell them to create the repo because that's annoyingly a separate step.
-
-```bash
-ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-REGION=us-west-2
-REPO=collector
-
-aws ecr get-login-password --region "$REGION" \
-  | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com"
-
-docker tag collector:local "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$REPO:latest"
-docker push "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$REPO:latest"
-```
-
-The ECR repository and a Lambda execution role need to exist before the first deploy.
+Push the image to ECR. The ECR repository needs to exist first; see [Appendix: ECR setup](#ecr-setup) for the one-time commands.
 
 ### Create the Lambda
 
-TODO: where did that role come from?
+The Lambda needs an execution role with `AWSLambdaBasicExecutionRole` and a trust policy that lets `lambda.amazonaws.com` assume it; see [Appendix: Lambda execution role](#lambda-execution-role) for the one-time setup.
 
 ```bash
 aws lambda create-function \
@@ -189,7 +175,7 @@ aws lambda create-function \
   --architectures arm64 \
   --memory-size 512 \
   --timeout 30 \
-  --environment "Variables={INGEST_BEARER_TOKEN=...,OTLP_ENDPOINT=...,BACKEND_API_KEY=...}"
+  --environment "Variables={INGEST_BEARER_TOKEN=...,HONEYCOMB_API_KEY=...}"
 
 aws lambda wait function-active-v2 --function-name collector
 ```
@@ -206,9 +192,7 @@ aws lambda create-function-url-config \
 
 ### Permissions — both statements are required
 
-TODO: is this generally true about lambas? Maybe it should be in some sort of appendix, if it is not specific to this collector.
-
-As of October 2025, `lambda:InvokeFunctionUrl` alone is not sufficient to allow public Function URL invocations. You also need `lambda:InvokeFunction` with `--invoked-via-function-url`:
+This is general Lambda Function URL behavior as of October 2025, not specific to the collector — but it's the single most common silent failure when first deploying, so it lives here in the main flow rather than in an appendix. `lambda:InvokeFunctionUrl` alone is not sufficient to allow public Function URL invocations; you also need `lambda:InvokeFunction` with `--invoked-via-function-url`:
 
 ```bash
 aws lambda add-permission \
@@ -243,13 +227,9 @@ curl -i -X POST "${URL}v1/traces" \
 
 Expected: **400**. The collector parses the invalid OTLP body and rejects it. A 400 here means the Function URL accepted the request, LWA forwarded it, and the collector ran. If you see 403, see troubleshooting. If you see 401, the bearer token in the producer doesn't match the one in the Lambda's environment.
 
-**2. A real OTLP request succeeds.** Use any OTel SDK with `OTLPSpanExporter` and a `SimpleSpanProcessor` (not `BatchSpanProcessor` — for verification you want the export's return value to reflect the actual export status). Capture the result of `span_exporter.export(...)`. It should be `SUCCESS`.
+**2. A real OTLP request succeeds.** Use any OTel SDK with `OTLPSpanExporter` and a `SimpleSpanProcessor` (not `BatchSpanProcessor` — for verification you want the export's return value to reflect the actual export status). Capture the result of `span_exporter.export(...)`. It should be `SUCCESS`. For a curl-only alternative, the `sample-span.json` + curl pattern in [Testing an OpenTelemetry Collector deployed as a Daemonset in Kubernetes](https://jessitron.com/2023/09/08/testing-an-opentelemetry-collector-deployed-as-a-daemonset-in-kubernetes/) works the same way against a Function URL — point the curl at `${URL}v1/traces` and add the bearer header.
 
-TODO: link to my "send a test span" post
-
-**3. The span lands in your backend.** Query by trace ID or service name. If the producer reported `SUCCESS` but the backend shows nothing, the most likely cause is an enabled `sending_queue` or a `batch` processor — see troubleshooting.
-
-TODO: mention the Honeycomb MCP
+**3. The span lands in your backend.** Query by trace ID or service name. If you're sending to Honeycomb, the [Honeycomb MCP server](https://github.com/honeycombio/honeycomb-mcp) lets your editor or CLI query traces directly — `get_trace` with the trace ID returns the span shape without opening the UI, which makes "did my one test span land" a one-line check. If the producer reported `SUCCESS` but the backend shows nothing, the most likely cause is an enabled `sending_queue` or a `batch` processor — see troubleshooting.
 
 ## CloudWatch volume
 
@@ -259,9 +239,7 @@ Approximate per-invocation log output:
 - **Warm invocation:** 3 lines (Lambda runtime only; the collector emits nothing during steady-state processing at `info` level).
 - **Container retirement** (Lambda recycles containers after idle): 4 lines (graceful shutdown).
 
-At 100 invocations per day with one cold start, this is roughly 315 lines and 10 KB per day. CloudWatch ingest is $0.50 per GB. The volume is negligible.
-
-TODO: don't say neglible, tell them the tiny number
+At 100 invocations per day with one cold start, this is roughly 315 lines and 10 KB per day — about 4 MB per year. At CloudWatch's $0.50/GB ingest rate, that's roughly **$0.002 per year**.
 
 ---
 
@@ -283,9 +261,16 @@ The bearer token in the request doesn't match `INGEST_BEARER_TOKEN` in the Lambd
 
 A `batch` processor or an enabled `sending_queue` is holding spans in memory across the Lambda freeze. Remove the batch processor and set `sending_queue.enabled: false` on every exporter.
 
-You can confirm this is the cause by setting the collector's log level to `debug` temporarily — you'll see the spans arrive at the exporter but no export attempt before the invocation ends.
+You can confirm this is the cause by setting the collector's log level to `debug` temporarily — you'll see the spans arrive at the exporter but no export attempt before the invocation ends. Set it in `config.yaml`:
 
-TODO: tell them how to set that log level
+```yaml
+service:
+  telemetry:
+    logs:
+      level: debug
+```
+
+Rebuild and redeploy. Switch back to `info` once you've diagnosed the issue; `debug` is noisy enough to matter for CloudWatch volume.
 
 ### `InvalidParameterValueException: image manifest ... is not supported` when creating the function
 
@@ -316,3 +301,58 @@ Check the collector's logs in CloudWatch. The most common causes are a missing r
 ### The backend is briefly down and traces are lost
 
 Expected. Lambda has no cross-invocation buffer; if the backend returns 5xx, the in-process retry inside that invocation runs and then the container freezes. Producer-side `BatchSpanProcessor` retry covers most short outages — that is the only buffer you have in this shape. If you need durable buffering, this pattern is the wrong fit; use a persistent collector instead.
+
+---
+
+## Appendix: one-time AWS setup
+
+The main flow above assumes the ECR repository and Lambda execution role already exist. These are the one-time commands to create them.
+
+### ECR setup
+
+```bash
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+REGION=us-west-2
+REPO=collector
+
+aws ecr create-repository --repository-name "$REPO" --region "$REGION"
+```
+
+`create-repository` errors if the repo already exists; safe to ignore.
+
+To push to it (from the main flow):
+
+```bash
+aws ecr get-login-password --region "$REGION" \
+  | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com"
+
+docker tag collector:local "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$REPO:latest"
+docker push "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/$REPO:latest"
+```
+
+### Lambda execution role
+
+The role needs two pieces: a trust policy letting Lambda assume it, and a permissions policy letting it write CloudWatch logs. `AWSLambdaBasicExecutionRole` is the managed policy that covers the logs.
+
+```bash
+cat > trust.json <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Service": "lambda.amazonaws.com"},
+    "Action": "sts:AssumeRole"
+  }]
+}
+EOF
+
+aws iam create-role \
+  --role-name CollectorLambda \
+  --assume-role-policy-document file://trust.json
+
+aws iam attach-role-policy \
+  --role-name CollectorLambda \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+```
+
+The role ARN goes into `--role` on `aws lambda create-function` in the main flow.
