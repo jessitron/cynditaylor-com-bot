@@ -45,7 +45,7 @@ Lambda container image
 
 [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter) is the load-bearing piece. It registers as a Lambda extension, exposes the Lambda Runtime API as an HTTP listener on a port of your choosing, and forwards each invocation to your container's HTTP server. The Collector's OTLP/HTTP receiver is an HTTP server. LWA bridges them.
 
-TODO: Put a note about auth here, that this uses a static bearer token known by authorized producers and this lambda.
+**A note on auth.** The bearer token in the diagram is optional but recommended. The Collector's OTLP receiver works without it. But a Function URL with `auth_type=NONE` is publicly reachable, so without a check inside the collector, anyone who learns the URL can send data through it to your backend — running up your ingest bill and polluting your telemetry. The hostname is random, but URLs leak (commit history, screenshots, packet captures). A static bearer token, shared between authorized producers and this Lambda, raises the bar from "anyone with the URL" to "anyone with the URL and the token." Details in the Authentication section below.
 
 ## The container image
 
@@ -127,9 +127,11 @@ The official fix for these is the `decouple` processor from the `opentelemetry-l
 
 ### Authentication
 
-Function URLs support `auth_type=AWS_IAM` and `auth_type=NONE`. IAM auth requires Sigv4-signing the OTLP requests on the producer side, and the OpenTelemetry SDKs do not sign with Sigv4. Writing a Sigv4-signing OTLP exporter is more work than this whole pattern is worth.
+Bearer auth is optional but recommended; see the note in Architecture for why. This section covers how.
 
-The pragmatic answer is `auth_type=NONE` on the Function URL plus the `bearertokenauth` extension inside the collector. The Function URL hostname is unguessable random; the bearer token is a shared secret in the producer's environment and the Lambda's environment. If the token leaks, rotate it.
+Function URLs support `auth_type=AWS_IAM` and `auth_type=NONE`. IAM would be the strict answer, but it requires Sigv4-signing the OTLP requests on the producer side, and the OpenTelemetry SDKs do not sign with Sigv4. Writing a Sigv4-signing OTLP exporter is more work than this whole pattern is worth.
+
+The pragmatic answer is `auth_type=NONE` on the Function URL plus the `bearertokenauth` extension inside the collector. The bearer token is a shared secret between the producer's environment and the Lambda's environment. If it leaks, rotate it.
 
 The producer sets:
 
@@ -138,6 +140,8 @@ OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer <token>
 ```
 
 The header name is case-insensitive at the receiver. The token value is not.
+
+If you skip bearer auth, drop the `extensions` block, the `auth:` stanza on the receiver, and the `extensions: [bearertokenauth/ingest]` line under `service`. Everything else in the config is the same.
 
 ## Building, pushing, deploying
 
