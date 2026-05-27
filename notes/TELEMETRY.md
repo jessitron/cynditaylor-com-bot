@@ -22,6 +22,28 @@ Tracing/observability work. Agent feature pipeline lives in `notes/ACTIVE.md`.
 - Skills: `notes/skills/strands-honeycomb-tracing/`, `notes/skills/otel-collector-on-lambda/`, `notes/skills/collector-pipeline-provenance/`.
 - Probe: `scripts/_probe_strands_langfuse.py` checks `is_langfuse` + `use_latest_genai_conventions` without sending a trace.
 
+## Under consideration: collapse Boswell into the AgentCore VM (2026-05-27)
+
+Thinking out loud — not committed. Question: what stops us from running `otelcol-contrib` *inside* the AgentCore microVM alongside the Strands agent, instead of as a separate Lambda?
+
+Short answer: nothing fundamental. AgentCore takes a custom container image and gives it outbound network. The same `collector/config.yaml` we already run in two places (Boswell Lambda, local docker via `./run`) would work in a third.
+
+**What gets simpler if we do this:**
+- Kills the Lambda + Function URL + ECR repo (`collector`) + IAM role + `INGEST_BEARER_TOKEN` rotation story.
+- Removes one network hop (agent → Boswell → Honeycomb becomes agent → localhost → Honeycomb).
+- Removes Boswell's ~4s cold-start tax on rare emails — the collector is already warm inside the agent's microVM.
+- The local-dev shape already proves the in-process-adjacent collector works.
+
+**What we'd lose / inherit:**
+- **Packaging**: AgentCore expects one HTTP server (the agent) to answer it. Bundling the collector means a tiny supervisor, or the agent's entrypoint forks `otelcol-contrib` before serving. Not blocking, real work.
+- **Lifecycle**: AgentCore tears the microVM down when the session ends. Same constraint as Lambda — want sync export or a shutdown hook to flush. *Within* a session the microVM stays warm, which is nicer than Lambda's per-invocation freeze; can use proper batching.
+- **Billing**: the collector adds ~50–100 MB RSS and a bit of CPU. Lands directly in `cost.agentcore.memory.peak_rss_bytes` and `cost.agentcore.cpu.seconds`. Visible, small.
+- **Boswell provenance still works** — same config, same OTTL, same `collector.boswell.*` stamps. We'd probably rename to something less Lambda-specific.
+
+**Why this still leaves Boswell-as-Lambda valuable elsewhere:** the blog post and the `otel-collector-on-lambda` skill cover the case where there's no convenient long-running compute to bundle into. Mom-volume + AgentCore is exactly the case where there *is* one, so the Lambda shape's main raison d'être (no idle compute to attach to) doesn't apply here.
+
+**To revisit when:** we touch the AgentCore image for some other reason, or Boswell needs material work (e.g. Lambda cost telemetry — that line item gets weird if Boswell isn't a Lambda).
+
 ## Cost telemetry: full cost of one email
 
 Goal: one Honeycomb query returns dollars-per-session (or per email, per user) across every service we pay for. With `session.id` already on every span, the cross-service join is free.
