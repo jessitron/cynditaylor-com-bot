@@ -10,6 +10,8 @@ You can package the OTel Collector as a Lambda container image and front it with
 
 At low volume this costs essentially nothing: a Lambda below the free tier rounds to zero. Cold start is around 4 seconds; warm invocations are 2–4 ms.
 
+The full file set (Dockerfile, `config.yaml`, and bootstrap/build/deploy scripts) is available as a [companion gist](https://gist.github.com/jessitron/f2cc160cb5e635d1c60752b5f2d038a8). The rest of the post explains what each piece does.
+
 ## When this fits
 
 The Lambda shape works when:
@@ -144,6 +146,8 @@ The header name is case-insensitive at the receiver. The token value is not.
 If you skip bearer auth, drop the `extensions` block, the `auth:` stanza on the receiver, and the `extensions: [bearertokenauth/ingest]` line under `service`. Everything else in the config is the same.
 
 ## Building, pushing, deploying
+
+The [companion gist](https://gist.github.com/jessitron/f2cc160cb5e635d1c60752b5f2d038a8) packages the commands below as `bootstrap.sh`, `build.sh`, and `deploy.sh` if you'd rather run scripts than read shell out of a blog post.
 
 ### Build
 
