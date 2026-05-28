@@ -1,5 +1,7 @@
 # Running the OpenTelemetry Collector as a Lambda
 
+_Status: submitted for publication on the Honeycomb blog._
+
 The OpenTelemetry Collector is usually deployed as a long-running process: a sidecar, a DaemonSet, an EC2 instance, a docker container on my computer. It sits there listening for telemetry. That's fine when I want to send telemetry all day, but not when telemetry is rare. Like right now, when I have an agent defined on AgentCore, and it runs a few times a week maybe. Or my website that hardly sees any traffic.
 
 Can I run the OpenTelemetry Collector as a Lambda function? Sounds tricky, but hey, that's what my coding assistant is for! Here is how we got it working:
