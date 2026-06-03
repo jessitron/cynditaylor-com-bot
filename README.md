@@ -46,18 +46,18 @@ AWS AgentCore Runtime          │
     └── OpenTelemetry → local collector → Honeycomb  (observability)
 ```
 
-| Concern | Choice |
-|---|---|
-| Agent framework | [Strands Agents](https://strandsagents.com/) |
-| Agent runtime | [AWS AgentCore Runtime](https://aws.amazon.com/bedrock/agentcore/) with persistent session storage |
-| LLM | Claude Sonnet 4.5 via Amazon Bedrock (region us-west-2) |
-| Email in | Amazon SES inbound → S3 (`cyndibot-incoming-emails`) |
-| Email out | Amazon SES `SendEmail` |
-| Receiving address | `*@cyndibot.jessitron.honeydemo.io` |
-| Webhook entry point | AWS Lambda (triggered by SES receipt rule) |
-| Site hosting | GitHub Pages (static HTML) |
-| Site source | GitHub repo — cloned into AgentCore session storage, committed via shelled `git` |
-| Observability | [Honeycomb](https://www.honeycomb.io/) via OpenTelemetry + OpenInference (local & cloud) |
+| Concern             | Choice                                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------------------- |
+| Agent framework     | [Strands Agents](https://strandsagents.com/)                                                       |
+| Agent runtime       | [AWS AgentCore Runtime](https://aws.amazon.com/bedrock/agentcore/) with persistent session storage |
+| LLM                 | Claude Sonnet 4.5 via Amazon Bedrock (region us-west-2)                                            |
+| Email in            | Amazon SES inbound → S3 (`cyndibot-incoming-emails`)                                               |
+| Email out           | Amazon SES `SendEmail`                                                                             |
+| Receiving address   | `*@cyndibot.jessitron.honeydemo.io`                                                                |
+| Webhook entry point | AWS Lambda (triggered by SES receipt rule)                                                         |
+| Site hosting        | GitHub Pages (static HTML)                                                                         |
+| Site source         | GitHub repo — cloned into AgentCore session storage, committed via shelled `git`                   |
+| Observability       | [Honeycomb](https://www.honeycomb.io/) via OpenTelemetry + OpenInference (local & cloud)           |
 
 ## Project structure
 
@@ -145,6 +145,7 @@ _Not built yet._ Plan: replace the S3 action in the `cyndibot-inbound` receipt r
 ## Observability
 
 Traces are instrumented via `openinference-instrumentation-bedrock` and Strands' native `gen_ai.*` OTel emission (`OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental`). Sent over OTLP to the local collector, which lifts `gen_ai.client.inference.operation.details` span-event attrs onto the parent span (OTTL `merge_maps`) and forwards to Honeycomb. Every agent run shows:
+
 - The incoming email's parsed fields
 - Which files were read / edited in the cloned repo
 - The LLM's reasoning and edits
@@ -159,17 +160,24 @@ View traces in Honeycomb — team `modernity`, env `local` for local runs, env `
 
 **Why clone the repo onto AgentCore session storage (not direct GitHub API)?** AgentCore Runtime gives each session a persistent Linux filesystem (up to 1 GB, 14-day idle TTL). Cloning the site repo once and keeping it warm lets the agent use normal tools — `grep`, `sed`, multi-file edits, a local preview if we want one — instead of making round-trips for every file. A scoped PAT handles auth the same way the Contents API would. Working tree is reset to `origin/main` at the start of every invoke so state bugs can't accumulate.
 
-**Why one AgentCore session per mom's email address?** When mom sends a follow-up ("no wait, make it horizontal"), we want the agent to know what "it" refers to. Same `sessionId` = same microVM = warm clone + `FileSessionManager` conversation history. 14-day idle TTL is far longer than any realistic gap between messages.
+**Why one AgentCore session per mom's email?** When mom sends a follow-up ("no wait, make it horizontal"), we want the agent to know what "it" refers to. Same `sessionId` = same microVM = warm clone + `FileSessionManager` conversation history. 14-day idle TTL is far longer than any realistic gap between messages.
 
 **Where does conversation memory live?** Three systems that are already authoritative — the agent just reads them, it doesn't maintain a parallel store:
+
 - **S3 inbound bucket** — raw MIME of every email mom has sent, forever (our retention). Agent reads recent ones at the start of each invoke for context.
 - **Site repo git log** — what actually changed. Rich commit messages ("Mom asked for larger font in bio section; changed `h2` size from 18px → 22px in `style.css`") make this useful as reasoning history, not just a changelog.
 - **Session storage** (`/mnt/workspace/.sessions/`) — Strands `FileSessionManager` keeps the running conversation. Convenient but not authoritative; S3 + git are the sources of truth.
 
 Outbound replies aren't recorded by SES by default; the `email.send_reply` tool will write a copy of each sent message to S3 as it sends, so the conversation is fully reconstructable without touching the agent's session state.
 
-Long-lived facts about mom (preferences, spelling quirks) that don't belong in either system can live in a small profile file in this repo — that's a **profile**, distinct from conversation memory.
-
 **Why no confirmation step?** The site is low-risk. The agent makes the change, pushes it, and emails mom a confirmation. If something's wrong, she replies — and the next invoke has the full email thread as context.
 
-**Why Honeycomb everywhere?** One columnar, queryable backend for both local debugging and cloud production. The local collector runs the same OTTL `merge_maps` lift that Boswell does in cloud, so trace shape is identical in both environments — same boards, same queries, no schema drift. Previously this project ran Arize Phoenix locally; switched away because keeping two backends in sync (and remembering which one to look in) wasn't worth the offline-friendliness.
+**Why Honeycomb everywhere?** One columnar, queryable backend for both local debugging and cloud production. The local collector runs the same OTTL `merge_maps` lift that Boswell does in cloud, so trace shape is identical in both environments — same boards, same queries, no schema drift.
+
+## Skills in this repo
+
+Self-contained skill docs in `notes/skills/<name>/SKILL.md`. Read the matching one before doing similar work in this or another project:
+
+- `strands-honeycomb-tracing` — Strands Agent OTel setup that lands queryable columns in Honeycomb's AI view.
+- `otel-collector-on-lambda` — packaging the OTel Collector as a Lambda container image. Six gotchas.
+- `collector-pipeline-provenance` — three-attribute pattern (`collector.<name>`, `.version`, `.invocation_id`) for stamping spans with which collector processed them.

@@ -4,17 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-In progress, partially built. **`notes/ACTIVE.md` is the source of truth for what exists vs. what's planned** — read it before assuming anything about layout or current state. Telemetry work (OTel shape into Honeycomb) is a separate line of work tracked in **`notes/TELEMETRY.md`**.
+Built and working, can be refined. **`notes/ACTIVE.md` is the source of truth for what exists vs. what's planned** — read it before assuming anything about layout or current state. Telemetry work (OTel shape into Honeycomb) is a separate line of work tracked in **`notes/TELEMETRY.md`**.
 
 Built: local Strands agent (`agent/cyndibot.py`, `agent/inbound.py`), full OTel → Honeycomb in both local and cloud (local via an `otel-collector-contrib` container started by `./run`; cloud via the Boswell collector lambda in `collector/`), SES inbound + outbound end-to-end on `cyndibot.jessitron.honeydemo.io`, site-edit tools (`agent/tools/site_tools.py`) with clone/sync/read/write/delete/commit/push, image tools (`agent/tools/image_tools.py` + `agent/image_subagent.py`) for viewing/inspecting/rotating/resizing attachments, AgentCore runtime deployed (`cyndibot-o2gGSvB6Hz` in us-west-2), `GITHUB_TOKEN` in Secrets Manager (fetched by container at startup), SES → Lambda → AgentCore dispatcher (`lambda/invoke_agent/`) wired into the `cyndibot-inbound` receipt rule, local container parity. The full pipeline runs end-to-end in cloud.
 
-Not yet built: SES production-access (still in sandbox — outbound replies only go to verified addresses).
+Not yet built: SES production-access (still in sandbox — outbound replies only go to verified addresses). Verified addresses are sufficient so far.
 
 ## What we're building
 
 An agent that lets Jessitron's mom update her static HTML GitHub Pages site (`cynditaylor-com`) by **sending email**. Pipeline: mom emails `*@cyndibot.jessitron.honeydemo.io` → Amazon SES inbound → S3 (raw MIME, source of truth) → dispatcher Lambda (`lambda/invoke_agent/`) → AWS AgentCore Runtime → Strands Agent (tools: `parse_inbound`, `send_reply`, `sync_workspace`, `list_site_files`, `read_site_file`, `write_site_file`, `delete_site_file`, `view_site_image`, `image_info`, `edit_images` subagent, `commit_site_changes`, `push_site_changes`) → commit + push to the site repo → GitHub Pages deploys → SES `SendEmail` reply back to mom. Observability via OpenTelemetry → Honeycomb in both environments — locally through an `otel-collector-contrib` container started by `./run`; in cloud through the Boswell collector lambda.
-
-> **Why email, not SMS?** Earlier plan used Twilio SMS. US toll-free A2P / 10DLC carrier compliance was disproportionate for a 1:1 bot, so we pivoted to SES. **Don't add new Twilio code.**
 
 The target site repo (`cynditaylor-com/`) is gitignored — if it appears locally it's the agent's working clone (or a sibling checkout), not part of this repo.
 
@@ -55,15 +53,8 @@ See README.md for the full architecture and the rationale in "Key decisions" (St
 
 Tracked as a separate line of work in **`notes/TELEMETRY.md`** — current shape, what's done, what's next. Two load-bearing rules to repeat here:
 
-- **After any test run that emits traces, report the trace URL** so Jessitron can click through. Use the Honeycomb MCP to find the trace and surface a permalink. Local traces land in team `modernity`, env `local`; cloud traces in env `cynditaylor-com-bot`.
-- Local collector runs in docker (`http://localhost:4318/v1/traces`, started by `./run`) using the *same* `collector/config.yaml` Boswell uses in cloud — identical trace shape across envs. Forwards to Honeycomb. All OTel env vars live in the gitignored `.env`.
+- **After any test run that emits traces, report the trace URL** so Jessitron can click through. Use the Honeycomb MCP to find the trace and surface a permalink. Put this in PR descriptions and comments! Local traces land in team `modernity`, env `local`; cloud traces in env `cynditaylor-com-bot`.
+- Local collector runs in docker (`http://localhost:4318/v1/traces`, started by `./run`) using the _same_ `collector/config.yaml` Boswell uses in cloud — identical trace shape across envs. Forwards to Honeycomb. All OTel env vars live in the gitignored `.env`.
 
 There's also `collector/` — an OTel collector deployed as a Lambda ("Boswell") that post-processes traces between AgentCore and Honeycomb. See `collector/README.md`.
 
-## Skills in this repo
-
-Self-contained skill docs in `notes/skills/<name>/SKILL.md`. Read the matching one before doing similar work in this or another project:
-
-- `strands-honeycomb-tracing` — Strands Agent OTel setup that lands queryable columns in Honeycomb's AI view.
-- `otel-collector-on-lambda` — packaging the OTel Collector as a Lambda container image. Six gotchas paid in blood.
-- `collector-pipeline-provenance` — three-attribute pattern (`collector.<name>`, `.version`, `.invocation_id`) for stamping spans with which collector processed them.
